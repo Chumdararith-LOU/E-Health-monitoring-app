@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
-export const router = Router();
+export const reportsRouter = Router();
 
-router.get('/reports/ping', (_req, res) => {
+reportsRouter.get('/reports/ping', (_req, res) => {
   res.json({ module: 'reports', ok: true });
 });
