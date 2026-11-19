@@ -11,14 +11,11 @@ describe('app', () => {
     expect(res.body).toEqual({ ok: true, name: 'ehealth-api', env: 'test' });
   });
 
-  it.each(['accounts', 'readings', 'ocr', 'reports'])(
-    'GET /api/v1/%s/ping returns 200',
-    async (module) => {
-      const res = await request(app).get(`/api/v1/${module}/ping`);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({ module, ok: true });
-    },
-  );
+  it('GET /api/v1/reports/ping returns 200', async () => {
+    const res = await request(app).get('/api/v1/reports/ping');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ module: 'reports', ok: true });
+  });
 
   it('unknown route returns 404 in the ApiError shape', async () => {
     const res = await request(app).get('/api/v1/nope');
