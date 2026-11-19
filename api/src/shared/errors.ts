@@ -3,8 +3,8 @@ export class AppError extends Error {
   readonly code: string;
   readonly messageKey: string; // i18n key, translated by the apps
 
-  constructor(status: number, code: string, messageKey: string) {
-    super(code);
+  constructor(status: number, code: string, messageKey: string, options?: ErrorOptions) {
+    super(code, options);
     this.name = 'AppError';
     this.status = status;
     this.code = code;

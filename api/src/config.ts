@@ -1,9 +1,13 @@
 import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
-// api/.env sits one level above both src/ and dist/
-const envFile = fileURLToPath(new URL('../.env', import.meta.url));
+// The api/ folder. src/config.ts and the bundled dist/server.js both sit one level below it,
+// so .env, DB_FILE and drizzle/ resolve the same from any working directory.
+export const apiDir = fileURLToPath(new URL('..', import.meta.url));
+
+const envFile = join(apiDir, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const DEV_JWT_SECRET = 'dev-only-jwt-secret-not-for-production';
@@ -24,6 +28,7 @@ const schema = z
   })
   .transform((env) => ({
     ...env,
+    DB_FILE: env.DB_FILE === ':memory:' ? env.DB_FILE : resolve(apiDir, env.DB_FILE),
     JWT_SECRET: env.JWT_SECRET ?? DEV_JWT_SECRET,
     DEV_LOGIN:
       env.NODE_ENV === 'production' ? false : (env.DEV_LOGIN ?? env.NODE_ENV === 'development'),
