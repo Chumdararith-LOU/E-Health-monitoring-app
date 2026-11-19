@@ -1,9 +1,11 @@
 import type { ApiError } from '@ehealth/types';
 import cors from 'cors';
 import express, { type ErrorRequestHandler } from 'express';
+import { sql } from 'drizzle-orm';
 import { config } from './config';
 import { moduleRouters } from './modules';
-import { notFound, toAppError } from './shared/errors';
+import { type Db, getDb } from './shared/db';
+import { AppError, notFound, toAppError } from './shared/errors';
 
 const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const appError = toAppError(err);
@@ -12,13 +14,19 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   res.status(appError.status).json(body);
 };
 
-export function createApp() {
+// db defaults to the app's shared database; tests can pass their own.
+export function createApp(db: () => Db = getDb) {
   const app = express();
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(express.json());
 
   app.get('/api/v1/health', (_req, res) => {
-    res.json({ ok: true, name: 'ehealth-api', env: config.NODE_ENV });
+    try {
+      db().get(sql`select 1`);
+    } catch (cause) {
+      throw new AppError(503, 'db_unavailable', 'errors.db_unavailable', { cause });
+    }
+    res.json({ ok: true, name: 'ehealth-api', env: config.NODE_ENV, db: 'ok' });
   });
   for (const router of moduleRouters) app.use('/api/v1', router);
 

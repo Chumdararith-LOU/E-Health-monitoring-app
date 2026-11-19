@@ -34,4 +34,10 @@
 - A module may import another module ONLY from its `index.ts` (its public API), never its
   internal files.
 - A module never writes to another module's tables.
+- A module's tables live only in its own `api/src/modules/<module>/schema.ts`.
+- Other modules may reference a table for a foreign key (imported from that module's `index.ts`)
+  but never write to it.
+- Seeds must be safe to run twice and only touch the module's own tables.
+- Before `db:generate`, update your branch from main. If migration files clash in a merge, delete
+  your new migration and generate it again.
 - The API returns i18n keys (`messageKey`), never Khmer or English text.
