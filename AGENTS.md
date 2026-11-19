@@ -21,6 +21,8 @@
 ## Rules for the coding agent
 
 - Do only the step you are asked for. Keep changes small.
+- Never commit directly to main. Work on the branch I name; main only changes through pull
+  requests (squash merge).
 - After each step: run the relevant checks, then make ONE git commit with a short, informal,
   lowercase message (e.g. "add api skeleton"). Do not push unless asked.
 - Each module stays in its own folders: `api/src/modules/<module>`, `web/src/modules/<module>`,
