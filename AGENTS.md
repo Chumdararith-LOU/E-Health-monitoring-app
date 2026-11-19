@@ -31,3 +31,7 @@
 - Never edit another module's files. Shared code lives in `api/src/shared`, `web/src/shared`,
   `mobile/src/shared` and `packages/types`.
 - All user-facing text goes through i18n keys, never hard-coded strings. Khmer is the default.
+- A module may import another module ONLY from its `index.ts` (its public API), never its
+  internal files.
+- A module never writes to another module's tables.
+- The API returns i18n keys (`messageKey`), never Khmer or English text.

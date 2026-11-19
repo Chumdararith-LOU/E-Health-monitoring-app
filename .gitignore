@@ -25,11 +25,13 @@ expo-env.d.ts
 
 # Env
 .env*
+!.env.example
 
 # Database
 *.sqlite
 *.sqlite3
 *.db
+api/data/
 
 # macOS
 .DS_Store
