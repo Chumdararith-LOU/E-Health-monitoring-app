@@ -1,0 +1,1 @@
+export { readingsRouter } from './routes';
