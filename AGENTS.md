@@ -41,3 +41,7 @@
 - Before `db:generate`, update your branch from main. If migration files clash in a merge, delete
   your new migration and generate it again.
 - The API returns i18n keys (`messageKey`), never Khmer or English text.
+- Every route that returns or changes patient data uses `requireAuth` + `requirePatientAccess`.
+- Tokens are created only with `signToken()` from `api/src/shared/auth.ts`.
+- The real access rule is plugged in with `registerAccessChecker` from the accounts module;
+  never edit `shared/access.ts` to add module logic.
