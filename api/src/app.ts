@@ -15,10 +15,21 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   res.status(appError.status).json(body);
 };
 
-// db defaults to the app's shared database; tests can pass their own.
 export function createApp(db: () => Db = getDb) {
   const app = express();
   app.disable('x-powered-by');
+  
+  if (config.NODE_ENV === 'development') {
+    app.use((req, res, next) => {
+      const start = Date.now();
+      res.on('finish', () => {
+        const ms = Date.now() - start;
+        console.log(`${req.method} ${req.originalUrl} → ${res.statusCode} (${ms} ms)`);
+      });
+      next();
+    });
+  }
+
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(express.json());
 
