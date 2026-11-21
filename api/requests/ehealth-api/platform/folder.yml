@@ -1,0 +1,7 @@
+info:
+  name: platform
+  type: folder
+  seq: 1
+
+request:
+  auth: inherit

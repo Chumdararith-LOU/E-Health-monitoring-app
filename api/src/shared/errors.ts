@@ -33,3 +33,6 @@ export function toAppError(err: unknown): AppError {
   }
   return new AppError(500, 'internal_error', 'errors.internal_error');
 }
+
+export const conflict = (code = 'conflict', messageKey = 'errors.conflict') =>
+  new AppError(409, code, messageKey);
