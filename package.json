@@ -11,9 +11,15 @@
     "test": "pnpm -r --if-present test",
     "lint": "pnpm -r --if-present lint",
     "format": "pnpm -r --if-present format",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "api:lint": "redocly lint docs/api/openapi.yaml",
+    "api:bundle": "redocly bundle docs/api/openapi.yaml -o docs/api/dist/openapi.yaml",
+    "api:docs": "redocly build-docs docs/api/openapi.yaml -o docs/api/dist/index.html",
+    "api:mock": "prism mock docs/api/openapi.yaml"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.82.0",
+    "@stoplight/prism-cli": "^5.16.0",
     "prettier": "^3.10.1",
     "typescript": "^6.0.3"
   }

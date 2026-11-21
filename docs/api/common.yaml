@@ -1,0 +1,56 @@
+# Owner: Rith. Shared pieces every module can $ref.
+schemas:
+  ApiError:
+    type: object
+    required: [error]
+    properties:
+      error:
+        type: object
+        required: [code, messageKey]
+        properties:
+          code:
+            type: string
+            description: Fixed name for programs, e.g. forbidden
+          messageKey:
+            type: string
+            description: i18n key the app translates, e.g. errors.forbidden
+  Role:
+    type: string
+    enum: [patient, caretaker, family, doctor, admin]
+  AuthUser:
+    type: object
+    required: [id, role, name]
+    properties:
+      id:
+        type: string
+        format: uuid
+      role:
+        $ref: '#/schemas/Role'
+      name:
+        type: string
+
+responses:
+  BadRequest:
+    description: Invalid input
+    content:
+      application/json:
+        schema:
+          $ref: '#/schemas/ApiError'
+        example:
+          error: { code: validation_failed, messageKey: errors.validation_failed }
+  Unauthorized:
+    description: Missing, invalid or expired token
+    content:
+      application/json:
+        schema:
+          $ref: '#/schemas/ApiError'
+        example:
+          error: { code: unauthorized, messageKey: errors.unauthorized }
+  Forbidden:
+    description: Signed in, but not allowed to see this
+    content:
+      application/json:
+        schema:
+          $ref: '#/schemas/ApiError'
+        example:
+          error: { code: forbidden, messageKey: errors.forbidden }

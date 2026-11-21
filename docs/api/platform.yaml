@@ -1,0 +1,70 @@
+# Owner: Rith. Platform endpoints.
+health:
+  get:
+    tags: [platform]
+    operationId: getHealth
+    summary: Is the API (and its database) up?
+    security: []
+    responses:
+      '200':
+        description: Everything is fine
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ok, name, env, db]
+              properties:
+                ok: { type: boolean }
+                name: { type: string }
+                env: { type: string, enum: [development, test, production] }
+                db: { type: string, enum: [ok] }
+            example: { ok: true, name: ehealth-api, env: development, db: ok }
+      '503':
+        description: Database unavailable
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: db_unavailable, messageKey: errors.db_unavailable }
+
+devLogin:
+  post:
+    tags: [platform]
+    operationId: devLogin
+    summary: Development only – sign in as a fixed test user without a password
+    description: Exists only when DEV_LOGIN is on. Never in production.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                required: [role]
+                properties:
+                  role:
+                    $ref: './common.yaml#/schemas/Role'
+              - type: object
+                required: [userId]
+                properties:
+                  userId: { type: string, format: uuid }
+          example: { role: doctor }
+    responses:
+      '200':
+        description: A token for the test user
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, user]
+              properties:
+                token: { type: string }
+                user:
+                  $ref: './common.yaml#/schemas/AuthUser'
+            example:
+              token: eyJhbGciOiJIUzI1NiJ9.example.signature
+              user: { id: '00000000-0000-4000-8000-000000000004', role: doctor, name: Dr. Keo Rathana }
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
