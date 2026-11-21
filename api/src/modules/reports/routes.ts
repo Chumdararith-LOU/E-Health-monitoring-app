@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requirePatientAccess } from '../../shared/access';
 import { requireAuth } from '../../shared/auth';
 import { validate } from '../../shared/validate';
+import { computeSummary } from './summary';
 
 export const reportsRouter = Router();
 
@@ -21,6 +22,6 @@ reportsRouter.get(
   validate({ query: summaryQuery }),
   (req, res) => {
     const { days } = req.query as unknown as z.infer<typeof summaryQuery>;
-    res.json({ patientId: req.params.patientId, days, fields: [] });
+    res.json(computeSummary({ patientId: req.params.patientId, days, readings: [] }));
   },
 );

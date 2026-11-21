@@ -19,7 +19,7 @@ describe('GET /patients/:patientId/summary', () => {
   it('200 for the patient themselves, days defaults to 7', async () => {
     const res = await request(app).get(url(own)).set('Authorization', await as('patient'));
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ patientId: own, days: 7 });
+    expect(res.body).toMatchObject({ patientId: own, fields: [], missedDays: 7 });
   });
 
   it('403 when a patient asks for another patient', async () => {
