@@ -22,6 +22,6 @@ reportsRouter.get(
   validate({ query: summaryQuery }),
   (req, res) => {
     const { days } = req.query as unknown as z.infer<typeof summaryQuery>;
-    res.json(computeSummary({ patientId: req.params.patientId, days, readings: [] }));
+    res.json(computeSummary({ patientId: req.params.patientId as string, days, readings: [] }));
   },
 );
