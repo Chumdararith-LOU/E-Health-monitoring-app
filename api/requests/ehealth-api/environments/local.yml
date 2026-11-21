@@ -2,5 +2,13 @@ name: local
 variables:
   - name: baseUrl
     value: http://localhost:3000/api/v1
+    description: ""
   - name: token
     value: eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoicGF0aWVudCIsIm5hbWUiOiJTb2sgRGFyYSIsInN1YiI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImlhdCI6MTc5NTI3MDYzOCwiZXhwIjoxNzk1ODc1NDM4fQ.ZhLe9b_ehJLIQIY9DBCtfgV1ZfmqihFv9t7FDZUnH24
+    description: ""
+  - name: patientId
+    value: 00000000-0000-4000-8000-000000000001
+    description: ""
+  - name: otherPatientId
+    value: 00000000-0000-4000-8000-000000000099
+    description: ""
