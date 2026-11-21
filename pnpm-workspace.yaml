@@ -1,7 +1,6 @@
 packages:
   - api
   - web
-  - mobile
   - packages/*
 
 onlyBuiltDependencies:
