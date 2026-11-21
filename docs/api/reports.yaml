@@ -1,0 +1,79 @@
+# Owner: Rith. Reports module.
+summary:
+  get:
+    tags: [reports]
+    operationId: getPatientSummary
+    summary: Max, min and average of each measure for the last N days (US-10)
+    parameters:
+      - name: patientId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: days
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 365, default: 7 }
+    responses:
+      '200':
+        description: The summary. `from` and `to` are calendar days in Asia/Phnom_Penh.
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/PatientSummary'
+            example:
+              patientId: '00000000-0000-4000-8000-000000000001'
+              from: '2026-11-18'
+              to: '2026-11-20'
+              fields:
+                - fieldKey: systolic
+                  min: 118
+                  max: 128
+                  avg: 123
+                  count: 2
+                  latest: { value: 118, measuredAt: '2026-11-19T00:05:00Z' }
+                - fieldKey: glucose
+                  min: 98
+                  max: 105
+                  avg: 101.5
+                  count: 2
+                  latest: { value: 98, measuredAt: '2026-11-19T00:05:00Z' }
+              missedDays: 1
+              outOfRangeCount: 1
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+
+schemas:
+  FieldSummary:
+    type: object
+    required: [fieldKey, min, max, avg, count]
+    properties:
+      fieldKey:
+        type: string
+        description: e.g. systolic, diastolic, pulse, glucose, or an admin-defined field
+      min: { type: number }
+      max: { type: number }
+      avg: { type: number, description: Rounded to 1 decimal }
+      count: { type: integer }
+      latest:
+        type: object
+        required: [value, measuredAt]
+        properties:
+          value: { type: number }
+          measuredAt: { type: string, format: date-time }
+  PatientSummary:
+    type: object
+    required: [patientId, from, to, fields, missedDays, outOfRangeCount]
+    properties:
+      patientId: { type: string, format: uuid }
+      from: { type: string, format: date }
+      to: { type: string, format: date }
+      fields:
+        type: array
+        items:
+          $ref: '#/schemas/FieldSummary'
+      missedDays: { type: integer, description: Days in the window with no reading }
+      outOfRangeCount: { type: integer, description: Readings with at least one value outside its normal range }
