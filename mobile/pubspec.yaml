@@ -1,0 +1,37 @@
+name: ehealth_mobile
+description: "E-Health Monitoring App — mobile UI build with hard-coded sample data (no backend yet)."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Part of the Flutter SDK. Gives Khmer + English strings to the built-in
+  # date and time pickers.
+  flutter_localizations:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: NotoSansKhmer
+      fonts:
+        - asset: assets/fonts/NotoSansKhmer-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKhmer-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansKhmer-Bold.ttf
+          weight: 700
+    - family: ShareTechMono
+      fonts:
+        - asset: assets/fonts/ShareTechMono-Regular.ttf

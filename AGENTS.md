@@ -6,7 +6,7 @@
 - Stack: TypeScript everywhere, pnpm workspaces monorepo:
   - `api/` (Node.js + Express)
   - `web/` (React + Vite)
-  - `mobile/` (React Native + Expo)
+  - `mobile/` (Flutter / Dart – not part of the pnpm workspace; managed with `flutter pub`)
   - `packages/types/` (shared TypeScript types)
   - `docs/`
 - Architecture: modular monolith. One API, one SQLite file.
