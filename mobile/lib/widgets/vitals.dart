@@ -5,9 +5,16 @@ import '../l10n/strings.dart';
 import '../theme/tokens.dart';
 import 'status.dart';
 
-/// Label / big number / unit, with a High or Low badge when out of range.
+/// Label / big tabular number / unit, with a High or Low badge when out of range.
 class VitalTile extends StatelessWidget {
-  const VitalTile({super.key, required this.label, required this.value, required this.unit, this.status, this.big = false});
+  const VitalTile({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.unit,
+    this.status,
+    this.big = false,
+  });
 
   final String label;
   final String value;
@@ -18,22 +25,33 @@ class VitalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final flagged = status == RangeStatus.high || status == RangeStatus.low;
+    final numStyle = (big ? T.hero : T.value).copyWith(
+      color: flagged ? C.errText : C.text,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: T.cap, maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(
+          label,
+          style: T.capSm.copyWith(fontWeight: FontWeight.w600, color: C.text2),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(l.n(value), style: big ? T.hero : T.value),
+          child: Text(l.n(value), style: numStyle),
         ),
-        Text(unit, style: T.cap),
-        if (status == RangeStatus.high || status == RangeStatus.low) ...[
+        Text(unit, style: T.capSm.copyWith(color: C.hint)),
+        if (flagged) ...[
           const SizedBox(height: 6),
           StatusBadge(
             label: status == RangeStatus.high ? l.high : l.low,
             tone: BadgeTone.crit,
-            icon: status == RangeStatus.high ? Icons.arrow_upward : Icons.arrow_downward,
+            icon: status == RangeStatus.high ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
           ),
         ],
       ],
@@ -64,12 +82,18 @@ class VitalRow extends StatelessWidget {
             big: big,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           flex: 4,
-          child: VitalTile(label: l.pulse, value: reading.pulse?.toString() ?? '—', unit: 'bpm', status: reading.pulseStatus, big: big),
+          child: VitalTile(
+            label: l.pulse,
+            value: reading.pulse?.toString() ?? '—',
+            unit: 'bpm',
+            status: reading.pulseStatus,
+            big: big,
+          ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           flex: 5,
           child: VitalTile(

@@ -16,27 +16,60 @@ ThemeData buildTheme() {
     colorScheme: scheme,
     fontFamily: T.f,
     scaffoldBackgroundColor: C.canvas,
-    splashFactory: NoSplash.splashFactory,
-    highlightColor: Colors.transparent,
+    splashFactory: InkRipple.splashFactory,
+    splashColor: const Color(0x140F5C7A),
+    highlightColor: const Color(0x0A0F5C7A),
+    dividerColor: C.divider,
     textSelectionTheme: const TextSelectionThemeData(
       cursorColor: C.focus,
-      selectionColor: Color(0x551976D2),
+      selectionColor: C.focusHalo,
       selectionHandleColor: C.focus,
     ),
     checkboxTheme: CheckboxThemeData(
       side: const BorderSide(color: C.borderStrong, width: 1.5),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(3))),
-      fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? C.navyBase : Colors.white),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(5)),
+      ),
+      fillColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected) ? C.navyBase : Colors.white,
+      ),
+    ),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: C.panel,
+      surfaceTintColor: Colors.transparent,
+      headerBackgroundColor: C.navyBase,
+      headerForegroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    ),
+    timePickerTheme: TimePickerThemeData(
+      backgroundColor: C.panel,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
   );
 }
 
-/// Fast, plain page change (under 150 ms, no sliding — NFR-07 "zero gimmicks").
+/// Crisp, smooth page transition (200 ms fade + subtle lift — responsive on mid-range phones).
 Route<T> fastRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
-    transitionDuration: const Duration(milliseconds: 140),
-    reverseTransitionDuration: const Duration(milliseconds: 120),
+    transitionDuration: const Duration(milliseconds: 200),
+    reverseTransitionDuration: const Duration(milliseconds: 160),
     pageBuilder: (context, animation, secondaryAnimation) => page,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.025),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
   );
 }
