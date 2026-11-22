@@ -3,6 +3,7 @@
 // offline waiting to sync / empty new account.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
@@ -13,18 +14,11 @@ import '../common/chart_builders.dart';
 import '../common/labels.dart';
 import '../record/record_flow.dart';
 
-class HomeTab extends StatefulWidget {
+class HomeTab extends StatelessWidget {
   const HomeTab({super.key, required this.onOpenReports, required this.onOpenLinks});
 
   final VoidCallback onOpenReports;
   final VoidCallback onOpenLinks;
-
-  @override
-  State<HomeTab> createState() => _HomeTabState();
-}
-
-class _HomeTabState extends State<HomeTab> {
-  bool _pickerOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +31,36 @@ class _HomeTabState extends State<HomeTab> {
     final isCaretaker = st.role == Role.caretaker;
     final isFamily = st.role == Role.family;
 
+    final statusKey = ValueKey<String>(
+      '${patient.id}_${today?.time.millisecondsSinceEpoch ?? 'none'}_${today?.pendingSync ?? false}_${st.role.name}',
+    );
+
     final cards = <Widget>[
-      if (empty && st.role == Role.patient) Text(l.welcome(patient.firstName.of(l.km)), style: T.title),
-      if (today != null) _recordedPanel(l, st, today, patient) else _notRecordedPanel(l, st, patient),
-      if (today == null && !empty) _latestPanel(l, readings.first, patient),
+      if (empty && st.role == Role.patient)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(l.welcome(patient.firstName.of(l.km)), style: T.title),
+        ),
+      AnimatedSwitcher(
+        duration: D.animMed,
+        switchInCurve: D.animCurve,
+        switchOutCurve: D.animCurve,
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: anim,
+          child: SizeTransition(
+            sizeFactor: anim,
+            axisAlignment: -1,
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(
+          key: statusKey,
+          child: today != null
+              ? _recordedPanel(context, l, st, today, patient)
+              : _notRecordedPanel(context, l, st, patient),
+        ),
+      ),
+      if (today == null && !empty) _latestPanel(context, l, readings.first, patient),
       if (st.offline) StatusAlertBanner(severity: Severity.info, message: l.offlineInfo),
       if (empty) _emptyPanel(l, isFamily ? l.noReadingsYetBy(patient.firstName.of(l.km)) : l.noReadingsYet),
       if (empty && st.role == Role.patient) _linkPanel(l),
@@ -50,24 +70,13 @@ class _HomeTabState extends State<HomeTab> {
 
     return Column(
       children: [
-        if (isCaretaker) _caretakerBanner(l, st),
+        if (isCaretaker) _caretakerBanner(context, l, st),
         if (isFamily) _familyBanner(l, patient.name.of(l.km)),
         Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: ListView(padding: const EdgeInsets.all(16), children: gapped(cards, 16)),
-              ),
-              if (_pickerOpen && isCaretaker) ...[
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _pickerOpen = false),
-                    child: const ColoredBox(color: C.scrimLight),
-                  ),
-                ),
-                Positioned(left: 12, right: 12, top: 6, child: _picker(l, st)),
-              ],
-            ],
+          child: ListView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            children: gapped(cards, 14),
           ),
         ),
       ],
@@ -79,20 +88,32 @@ class _HomeTabState extends State<HomeTab> {
   String _statusTitle(L l, AppState st, PatientInfo p) =>
       st.role == Role.caretaker ? l.todayStatusFor(p.name.of(l.km)) : l.todayStatus;
 
-  Widget _notRecordedPanel(L l, AppState st, PatientInfo p) {
+  Widget _notRecordedPanel(BuildContext context, L l, AppState st, PatientInfo p) {
     final other = st.role != Role.patient;
     return BoxedPanel(
       accent: PanelAccent.warn,
+      leadingIcon: Icons.wb_sunny_outlined,
       title: _statusTitle(l, st, p),
-      trailing: st.role == Role.caretaker ? null : Text(l.dayY(st.today), style: T.cap),
+      trailing: st.role == Role.caretaker
+          ? null
+          : Text(l.dayY(st.today), style: T.cap.copyWith(fontWeight: FontWeight.w600)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Padding(padding: EdgeInsets.only(top: 3), child: Icon(Icons.warning_amber_rounded, size: 26, color: C.warnText)),
-              const SizedBox(width: 10),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: C.warnBg,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: C.warnDivider),
+                ),
+                child: const Icon(Icons.schedule_rounded, size: 22, color: C.warnText),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   other ? l.notRecordedName(p.firstName.of(l.km)) : l.notRecorded,
@@ -102,13 +123,13 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           if (st.canRecord) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             TactileButton(
               label: st.role == Role.caretaker ? l.recordFor(p.name.of(l.km)) : l.recordCta,
-              icon: Icons.add_circle_outline,
+              icon: Icons.add_circle_outline_rounded,
               variant: BtnVariant.green,
-              height: 64,
-              fontSize: 18,
+              height: 60,
+              fontSize: 17.5,
               onPressed: () => openRecord(context),
             ),
           ],
@@ -121,37 +142,47 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _recordedPanel(L l, AppState st, Reading r, PatientInfo p) {
+  Widget _recordedPanel(BuildContext context, L l, AppState st, Reading r, PatientInfo p) {
     return BoxedPanel(
       accent: PanelAccent.ok,
+      leadingIcon: Icons.check_circle_outline_rounded,
       title: _statusTitle(l, st, p),
       trailing: r.pendingSync
-          ? StatusBadge(label: l.pendingSync, tone: BadgeTone.warn, icon: Icons.schedule)
-          : (st.role == Role.caretaker ? null : Text(l.dayY(st.today), style: T.cap)),
+          ? StatusBadge(label: l.pendingSync, tone: BadgeTone.warn, icon: Icons.schedule_rounded)
+          : (st.role == Role.caretaker
+              ? null
+              : Text(l.dayY(st.today), style: T.cap.copyWith(fontWeight: FontWeight.w600))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Container(
-                width: 30,
-                height: 30,
-                decoration: const BoxDecoration(color: C.okBorder, borderRadius: D.radius),
-                child: const Icon(Icons.check, color: Colors.white, size: 22),
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(color: C.okBorder, shape: BoxShape.circle),
+                child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
               ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(l.recordedAt(l.time(r.time)), style: T.big.copyWith(color: C.okText))),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l.recordedAt(l.time(r.time)),
+                  style: T.big.copyWith(color: C.okText),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: C.divider), bottom: BorderSide(color: C.divider)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: C.panelHeader,
+              borderRadius: D.radius,
+              border: Border.all(color: C.divider),
             ),
             child: VitalRow(reading: r, big: true),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: Text(l.recordedBy(authorLabel(l, r, p)), style: T.cap)),
@@ -159,20 +190,27 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           if (r.pendingSync) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             StatusAlertBanner(severity: Severity.warn, message: l.savedOnPhone),
           ],
           if (st.canRecord) ...[
-            const SizedBox(height: 12),
-            TactileButton(label: l.addAnother, icon: Icons.add, height: 48, fontSize: 16, onPressed: () => openRecord(context)),
+            const SizedBox(height: 14),
+            TactileButton(
+              label: l.addAnother,
+              icon: Icons.add_rounded,
+              height: 48,
+              fontSize: 15.5,
+              onPressed: () => openRecord(context),
+            ),
           ],
         ],
       ),
     );
   }
 
-  Widget _latestPanel(L l, Reading r, PatientInfo p) {
+  Widget _latestPanel(BuildContext context, L l, Reading r, PatientInfo p) {
     return BoxedPanel(
+      leadingIcon: Icons.monitor_heart_outlined,
       title: l.latest,
       trailing: Text(l.dayTime(r.time), style: T.cap),
       footer: Row(
@@ -181,7 +219,10 @@ class _HomeTabState extends State<HomeTab> {
           MethodBadge(method: r.method),
           if (r.hasPhoto) ...[
             const SizedBox(width: 8),
-            _LinkText(text: l.viewPhoto, onTap: () => showPhotoDialog(context, reading: r)),
+            _PhotoPill(
+              text: l.viewPhoto,
+              onTap: () => showPhotoDialog(context, reading: r),
+            ),
           ],
         ],
       ),
@@ -192,14 +233,25 @@ class _HomeTabState extends State<HomeTab> {
   Widget _notePanel(L l, DoctorNote note) {
     return BoxedPanel(
       accent: PanelAccent.memo,
-      leadingIcon: Icons.description_outlined,
+      leadingIcon: Icons.medical_information_outlined,
       title: l.doctorNote,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(note.text.of(l.km), style: T.body),
-          const SizedBox(height: 8),
-          Text('${note.author.of(l.km)} · ${l.dayY(note.time)} · ${l.time(note.time)}', style: T.cap),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.person_outline_rounded, size: 15, color: C.memoIcon),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${note.author.of(l.km)} · ${l.dayY(note.time)} · ${l.time(note.time)}',
+                  style: T.cap.copyWith(color: C.memoIcon),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -210,16 +262,30 @@ class _HomeTabState extends State<HomeTab> {
     final start = DateTime(end.year, end.month, end.day - 6);
     final week = readings.where((r) => !r.time.isBefore(start)).toList();
     return BoxedPanel(
+      leadingIcon: Icons.show_chart_rounded,
       title: l.trend7,
-      trailing: Text('mmHg', style: T.cap),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: C.inputUnit,
+          borderRadius: D.radiusPill,
+        ),
+        child: Text('mmHg', style: T.capSm.copyWith(fontWeight: FontWeight.w600)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          bpChart(l, week, start, end, height: 180, today: end),
-          const SizedBox(height: 8),
+          bpChart(l, week, start, end, height: 186, today: end),
+          const SizedBox(height: 10),
           bpLegend(l, extra: l.daysOf(l.dayRange(start, end))),
-          const SizedBox(height: 12),
-          TactileButton(label: l.fullReport, trailingIcon: Icons.chevron_right, height: 48, fontSize: 16, onPressed: widget.onOpenReports),
+          const SizedBox(height: 14),
+          TactileButton(
+            label: l.fullReport,
+            trailingIcon: Icons.chevron_right_rounded,
+            height: 48,
+            fontSize: 15.5,
+            onPressed: onOpenReports,
+          ),
         ],
       ),
     );
@@ -227,18 +293,21 @@ class _HomeTabState extends State<HomeTab> {
 
   Widget _emptyPanel(L l, String title) {
     return BoxedPanel(
-      padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
       child: Column(
         children: [
           Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(color: C.panelHeader, border: Border.all(color: C.border), borderRadius: D.radius),
-            child: const Icon(Icons.bar_chart, size: 30, color: C.text2),
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              color: C.navyTint,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.bar_chart_rounded, size: 32, color: C.navyBase),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Text(title, textAlign: TextAlign.center, style: T.h.copyWith(fontSize: 17)),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(l.noReadingsHint, textAlign: TextAlign.center, style: T.cap.copyWith(fontSize: 15)),
         ],
       ),
@@ -247,14 +316,20 @@ class _HomeTabState extends State<HomeTab> {
 
   Widget _linkPanel(L l) {
     return BoxedPanel(
-      leadingIcon: Icons.link,
+      leadingIcon: Icons.link_rounded,
       title: l.linkCareTitle,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(l.linkCareHint, style: T.bodySm),
-          const SizedBox(height: 12),
-          TactileButton(label: l.openLinks, trailingIcon: Icons.chevron_right, height: 48, fontSize: 16, onPressed: widget.onOpenLinks),
+          Text(l.linkCareHint, style: T.bodySm.copyWith(color: C.text2)),
+          const SizedBox(height: 14),
+          TactileButton(
+            label: l.openLinks,
+            trailingIcon: Icons.chevron_right_rounded,
+            height: 48,
+            fontSize: 15.5,
+            onPressed: onOpenLinks,
+          ),
         ],
       ),
     );
@@ -262,44 +337,69 @@ class _HomeTabState extends State<HomeTab> {
 
   // ---------- Caretaker & family context ----------
 
-  Widget _caretakerBanner(L l, AppState st) {
+  Widget _caretakerBanner(BuildContext context, L l, AppState st) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: const BoxDecoration(color: C.warnBg, border: Border(bottom: BorderSide(color: C.warnBorder, width: 2))),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: const BoxDecoration(
+        color: C.warnBg,
+        border: Border(bottom: BorderSide(color: C.warnDivider)),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.person_outline, size: 22, color: C.warnText),
-          const SizedBox(width: 8),
-          Text(l.recordingFor, style: T.bodySm.copyWith(color: C.warnText, fontWeight: FontWeight.w700, height: 1.65)),
-          const SizedBox(width: 8),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              shape: BoxShape.circle,
+              border: Border.all(color: C.warnDivider),
+            ),
+            child: const Icon(Icons.person_outline_rounded, size: 19, color: C.warnText),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            l.recordingFor,
+            style: T.bodySm.copyWith(color: C.warnText, fontWeight: FontWeight.w700, height: 1.5),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Semantics(
               button: true,
               label: '${l.recordingFor} ${st.activePatient.name.of(l.km)}',
               excludeSemantics: true,
-              child: GestureDetector(
-                onTap: () => setState(() => _pickerOpen = !_pickerOpen),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    gradient: D.grayGradient,
-                    borderRadius: D.radius,
-                    border: Border.all(color: _pickerOpen ? C.focus : C.borderInput, width: _pickerOpen ? 2 : 1),
-                    boxShadow: _pickerOpen ? const [BoxShadow(color: C.focusHalo, spreadRadius: 3)] : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          st.activePatient.name.of(l.km),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: T.bodyB,
+              child: Material(
+                color: C.panel,
+                borderRadius: D.radiusPill,
+                child: InkWell(
+                  borderRadius: D.radiusPill,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    _showPatientPicker(context, l, st);
+                  },
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    padding: const EdgeInsets.fromLTRB(14, 6, 10, 6),
+                    decoration: BoxDecoration(
+                      borderRadius: D.radiusPill,
+                      border: Border.all(color: C.warnBorder.withValues(alpha: 0.45)),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x0F0F172A), blurRadius: 6, offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            st.activePatient.name.of(l.km),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: T.bodyB.copyWith(fontSize: 15),
+                          ),
                         ),
-                      ),
-                      Icon(_pickerOpen ? Icons.expand_less : Icons.expand_more, color: C.text),
-                    ],
+                        const SizedBox(width: 4),
+                        const Icon(Icons.keyboard_arrow_down_rounded, color: C.text2, size: 22),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -310,80 +410,135 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _picker(L l, AppState st) {
+  Future<void> _showPatientPicker(BuildContext context, L l, AppState st) {
     final pts = st.visiblePatients;
-    return Container(
-      decoration: BoxDecoration(color: C.panel, border: Border.all(color: C.borderStrong), borderRadius: D.radius, boxShadow: D.modalShadow),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: const BoxDecoration(color: C.panelHeader, border: Border(bottom: BorderSide(color: C.border))),
-              child: Text(l.choosePatient(pts.length), style: T.cap.copyWith(fontWeight: FontWeight.w700)),
-            ),
-            for (final p in pts) _pickerRow(l, st, p),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: const BoxDecoration(color: C.warnBg, border: Border(top: BorderSide(color: C.warnDivider))),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(padding: EdgeInsets.only(top: 4), child: Icon(Icons.info_outline, size: 16, color: C.warnText)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(l.checkPatientName, style: T.cap.copyWith(color: C.warnText))),
-                ],
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      barrierColor: C.scrim,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              decoration: const BoxDecoration(
+                color: C.panel,
+                borderRadius: BorderRadius.all(Radius.circular(24)),
+                boxShadow: D.modalShadow,
+              ),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: const BoxDecoration(
+                            color: C.borderStrong,
+                            borderRadius: D.radiusPill,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(l.choosePatient(pts.length), style: T.big),
+                      const SizedBox(height: 12),
+                      ...gapped(
+                        pts.map((p) => _pickerRow(ctx, l, st, p)).toList(),
+                        10,
+                      ),
+                      const SizedBox(height: 14),
+                      StatusAlertBanner(
+                        severity: Severity.warn,
+                        icon: Icons.info_outline_rounded,
+                        message: l.checkPatientName,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _pickerRow(L l, AppState st, PatientInfo p) {
+  Widget _pickerRow(BuildContext ctx, L l, AppState st, PatientInfo p) {
     final selected = p.id == st.activePatientId;
     final today = st.todayReadingOf(p.id);
+
     return Semantics(
       button: true,
       selected: selected,
       label: p.name.of(l.km),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          st.selectPatient(p.id);
-          setState(() => _pickerOpen = false);
-        },
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 64),
-          padding: EdgeInsets.fromLTRB(selected ? 10 : 14, 8, 14, 8),
-          decoration: BoxDecoration(
-            color: selected ? C.navyTint : null,
-            border: Border(
-              left: BorderSide(color: selected ? C.navyBase : Colors.transparent, width: 4),
-              top: const BorderSide(color: C.divider),
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(width: 24, child: selected ? const Icon(Icons.check, color: C.navyBase) : null),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p.name.of(l.km), style: T.bodyB.copyWith(fontSize: 17)),
-                    const SizedBox(height: 2),
-                    today == null
-                        ? StatusBadge(label: l.notRecordedShort, tone: BadgeTone.warn, icon: Icons.warning_amber_rounded)
-                        : StatusBadge(label: l.recordedShort(l.time(today.time)), tone: BadgeTone.ok, icon: Icons.check),
-                  ],
-                ),
+      child: Material(
+        color: selected ? C.navyTint.withValues(alpha: 0.55) : C.panelHeader,
+        borderRadius: D.radius,
+        child: InkWell(
+          borderRadius: D.radius,
+          onTap: () {
+            HapticFeedback.lightImpact();
+            st.selectPatient(p.id);
+            Navigator.of(ctx).pop();
+          },
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 68),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: D.radius,
+              border: Border.all(
+                color: selected ? C.navyBase : C.border,
+                width: selected ? 1.75 : 1,
               ),
-            ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: selected ? C.navyBase : C.panel,
+                    shape: BoxShape.circle,
+                    border: selected ? null : Border.all(color: C.border),
+                  ),
+                  child: Icon(
+                    selected ? Icons.check_rounded : Icons.person_outline_rounded,
+                    color: selected ? Colors.white : C.text2,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(p.name.of(l.km), style: T.bodyB.copyWith(fontSize: 16.5)),
+                      const SizedBox(height: 4),
+                      today == null
+                          ? StatusBadge(
+                              label: l.notRecordedShort,
+                              tone: BadgeTone.warn,
+                              icon: Icons.schedule_rounded,
+                            )
+                          : StatusBadge(
+                              label: l.recordedShort(l.time(today.time)),
+                              tone: BadgeTone.ok,
+                              icon: Icons.check_rounded,
+                            ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -392,11 +547,22 @@ class _HomeTabState extends State<HomeTab> {
 
   Widget _familyBanner(L l, String name) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: const BoxDecoration(color: C.infoBg, border: Border(bottom: BorderSide(color: C.infoBorder, width: 2))),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: const BoxDecoration(
+        color: C.infoBg,
+        border: Border(bottom: BorderSide(color: Color(0xFFBAE6FD))),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.visibility_outlined, size: 22, color: C.infoText),
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: C.infoBorder.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.visibility_outlined, size: 17, color: C.infoText),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text.rich(
@@ -405,7 +571,7 @@ class _HomeTabState extends State<HomeTab> {
                 const TextSpan(text: ' · '),
                 TextSpan(text: l.readOnly),
               ]),
-              style: T.bodySm.copyWith(color: C.infoText, fontWeight: FontWeight.w600, height: 1.65),
+              style: T.bodySm.copyWith(color: C.infoText, fontWeight: FontWeight.w600, height: 1.55),
             ),
           ),
         ],
@@ -414,26 +580,43 @@ class _HomeTabState extends State<HomeTab> {
   }
 }
 
-class _LinkText extends StatelessWidget {
-  const _LinkText({required this.text, required this.onTap});
+class _PhotoPill extends StatelessWidget {
+  const _PhotoPill({required this.text, required this.onTap});
   final String text;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      link: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
-          child: Center(
-            widthFactor: 1,
-            heightFactor: 1,
-            child: Text(
-              text,
-              style: T.cap.copyWith(color: C.link, fontWeight: FontWeight.w600, decoration: TextDecoration.underline, decorationColor: C.link),
+      button: true,
+      label: text,
+      excludeSemantics: true,
+      child: Material(
+        color: C.navyTint,
+        borderRadius: D.radiusPill,
+        child: InkWell(
+          borderRadius: D.radiusPill,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.photo_outlined, size: 16, color: C.navyBase),
+                const SizedBox(width: 5),
+                Text(
+                  text,
+                  style: T.cap.copyWith(
+                    color: C.navyBase,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

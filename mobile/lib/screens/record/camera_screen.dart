@@ -1,10 +1,12 @@
-// Record step 1–2: camera with device-shaped mask, then "reading photo".
+// Record step 1–2: modern viewfinder with smoothly morphing device mask,
+// rounded corner brackets, glowing flash toggle, and smooth OCR progress card.
 // The viewfinder is simulated (no camera package yet) — Phak plugs in the
 // real camera preview where DeviceLcd is drawn.
 
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
@@ -54,6 +56,7 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
   }
 
   void _take() {
+    HapticFeedback.mediumImpact();
     final st = AppScope.read(context);
     if (st.offline) {
       // Server OCR can't run offline: skip the wait (ocr-camera-flow §4).
@@ -74,6 +77,7 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
   }
 
   void _manual() {
+    HapticFeedback.selectionClick();
     _ctl.stop();
     _processing = false;
     if (widget.attach) {
@@ -93,12 +97,15 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
           AppHeader(title: l.scanDevice, showBack: true),
           if (!widget.attach)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: const BoxDecoration(color: C.panelHeader, border: Border(bottom: BorderSide(color: C.borderStrong))),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              decoration: const BoxDecoration(
+                color: C.panel,
+                border: Border(bottom: BorderSide(color: C.divider)),
+              ),
               child: SegmentedToggle<DeviceMode>(
                 semanticLabel: l.deviceType,
                 options: [
-                  SegOption(DeviceMode.bp, l.modeBp, icon: Icons.favorite_border),
+                  SegOption(DeviceMode.bp, l.modeBp, icon: Icons.favorite_outline_rounded),
                   SegOption(DeviceMode.glucose, l.modeGlu, icon: Icons.water_drop_outlined),
                 ],
                 selected: _mode,
@@ -106,22 +113,6 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
               ),
             ),
           Expanded(child: _viewfinder(l)),
-          if (!_processing)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: const BoxDecoration(
-                color: C.infoBg,
-                border: Border(top: BorderSide(color: C.infoBorder), bottom: BorderSide(color: C.infoBorder)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(padding: EdgeInsets.only(top: 3), child: Icon(Icons.info_outline, size: 20, color: C.infoText)),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(l.cameraGuide, style: T.bodySm.copyWith(color: C.infoText, height: 1.7))),
-                ],
-              ),
-            ),
           _deck(l),
         ],
       ),
@@ -135,85 +126,161 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
       double fw;
       double fh;
       if (_mode == DeviceMode.bp) {
-        fw = math.min(234.0, maxW * 0.62);
+        fw = math.min(238.0, maxW * 0.62);
         fh = fw * 4 / 3;
       } else {
-        fw = math.min(290.0, maxW * 0.74);
+        fw = math.min(294.0, maxW * 0.76);
         fh = fw * 3 / 4;
       }
-      var limit = maxH - 70;
-      if (limit < 80) limit = 80;
+      var limit = maxH - 122;
+      if (limit < 96) limit = 96;
       if (fh > limit) {
         final k = limit / fh;
         fw *= k;
         fh *= k;
       }
-      final top = math.max(8.0, (maxH - (fh + 42)) / 2);
-      final frame = Rect.fromLTWH((maxW - fw) / 2, top + 42, fw, fh);
+      final top = math.max(12.0, (maxH - (fh + 94)) / 2);
+      final targetFrame = Rect.fromLTWH((maxW - fw) / 2, top + 38, fw, fh);
 
-      return Stack(
-        children: [
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF6B7178), Color(0xFF4A5057), Color(0xFF2F343A)],
-                ),
-              ),
-            ),
-          ),
-          Positioned.fromRect(
-            rect: frame,
-            child: Opacity(
-              opacity: _processing ? 0.55 : 1,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: FittedBox(
-                  child: DeviceLcd(mode: _mode, showGuides: _mode == DeviceMode.bp, glu: '112'),
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _MaskPainter(frame)))),
-          Positioned.fromRect(rect: frame.inflate(1.5), child: IgnorePointer(child: CustomPaint(painter: _FramePainter()))),
-          if (!_processing)
-            Positioned(
-              top: top,
-              left: 0,
-              right: 0,
-              child: Center(
+      return TweenAnimationBuilder<Rect?>(
+        tween: RectTween(begin: targetFrame, end: targetFrame),
+        duration: D.animMed,
+        curve: D.animCurve,
+        builder: (context, animatedRect, _) {
+          final frame = animatedRect ?? targetFrame;
+          return Stack(
+            children: [
+              Positioned.fill(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(color: C.okBorder, border: Border.all(color: C.okText), borderRadius: BorderRadius.circular(3)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check, size: 16, color: Colors.white),
-                      const SizedBox(width: 6),
-                      Text(l.ready, style: T.tab.copyWith(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w700)),
-                    ],
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF334155), Color(0xFF1E293B), Color(0xFF0F172A)],
+                    ),
                   ),
                 ),
               ),
-            ),
-          Positioned(
-            left: 10,
-            bottom: 6,
-            child: Text(l.simulatedCamera, style: T.capSm.copyWith(color: C.onDark)),
-          ),
-          if (_processing) ...[
-            Positioned.fill(child: Container(color: const Color(0x66000000))),
-            Positioned(
-              left: 20,
-              right: 20,
-              top: 0,
-              bottom: 0,
-              child: Center(child: _processingPanel(l)),
-            ),
-          ],
-        ],
+              Positioned.fromRect(
+                rect: frame,
+                child: AnimatedOpacity(
+                  duration: D.animFast,
+                  opacity: _processing ? 0.45 : 1.0,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: FittedBox(
+                      child: DeviceLcd(
+                        mode: _mode,
+                        showGuides: _mode == DeviceMode.bp,
+                        glu: '112',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(painter: _MaskPainter(frame)),
+                  ),
+                ),
+              ),
+              Positioned.fromRect(
+                rect: frame.inflate(2),
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(painter: _FramePainter()),
+                  ),
+                ),
+              ),
+              if (!_processing)
+                Positioned(
+                  top: math.max(8.0, frame.top - 36),
+                  left: 16,
+                  right: 16,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xE615803D),
+                        borderRadius: D.radiusPill,
+                        border: Border.all(color: const Color(0x55FFFFFF)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle_rounded, size: 15, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Text(
+                            l.ready,
+                            style: T.tab.copyWith(
+                              fontSize: 13.5,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (!_processing)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 14,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xCC0F172A),
+                          borderRadius: D.radius,
+                          border: Border.all(color: const Color(0x2EFFFFFF)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 2),
+                              child: Icon(Icons.lightbulb_outline_rounded, size: 18, color: Color(0xFF7DD3FC)),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                l.cameraGuide,
+                                style: T.cap.copyWith(color: Colors.white, height: 1.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          l.simulatedCamera,
+                          style: T.capSm.copyWith(color: C.onDark.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              AnimatedSwitcher(
+                duration: D.animMed,
+                child: _processing
+                    ? Container(
+                        key: const ValueKey<String>('processing'),
+                        color: const Color(0x880F172A),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Center(child: _processingPanel(l)),
+                      )
+                    : const SizedBox.shrink(key: ValueKey<String>('idle')),
+              ),
+            ],
+          );
+        },
       );
     });
   }
@@ -221,57 +288,62 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
   Widget _processingPanel(L l) {
     return Semantics(
       liveRegion: true,
-      child: Container(
-        decoration: BoxDecoration(color: C.panel, borderRadius: D.radius, border: Border.all(color: C.borderStrong), boxShadow: D.modalShadow),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: C.panel,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: D.modalShadow,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: const BoxDecoration(color: C.panelHeader, border: Border(bottom: BorderSide(color: C.border))),
-                child: Row(
-                  children: [
-                    const Icon(Icons.sync, size: 20, color: C.infoBorder),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(l.readingPhoto, style: T.h)),
-                  ],
-                ),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: C.infoBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.document_scanner_rounded, size: 20, color: C.infoBorder),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(l.readingPhoto, style: T.big)),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(l.pleaseWait, style: T.body),
-                    const SizedBox(height: 10),
-                    Container(
-                      height: 22,
-                      decoration: BoxDecoration(color: const Color(0xFFF1F3F5), border: Border.all(color: C.borderStrong), borderRadius: BorderRadius.circular(3)),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: AnimatedBuilder(
-                          animation: _ctl,
-                          builder: (context, _) => FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: _ctl.value.clamp(0.04, 1.0).toDouble(),
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: D.navyGradient,
-                                border: Border(right: BorderSide(color: C.navyDark)),
-                              ),
-                            ),
-                          ),
+              const SizedBox(height: 12),
+              Text(l.pleaseWait, style: T.body.copyWith(color: C.text2)),
+              const SizedBox(height: 14),
+              Container(
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: C.inputUnit,
+                  borderRadius: D.radiusPill,
+                ),
+                child: ClipRRect(
+                  borderRadius: D.radiusPill,
+                  child: AnimatedBuilder(
+                    animation: _ctl,
+                    builder: (context, _) => FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: _ctl.value.clamp(0.06, 1.0).toDouble(),
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: D.navyGradient,
+                          borderRadius: D.radiusPill,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Text(l.timeoutHint, style: T.cap),
-                  ],
+                  ),
                 ),
               ),
+              const SizedBox(height: 10),
+              Text(l.timeoutHint, style: T.cap),
             ],
           ),
         ),
@@ -281,19 +353,32 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
 
   Widget _deck(L l) {
     return Container(
-      decoration: const BoxDecoration(color: C.cameraDeck, border: Border(top: BorderSide(color: Colors.black))),
+      decoration: const BoxDecoration(
+        color: C.cameraDeck,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(top: BorderSide(color: Color(0x1FFFFFFF))),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
           child: _processing
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TactileButton(label: l.typeNow, icon: Icons.keyboard_outlined, fontSize: 16, onPressed: _manual),
+                    TactileButton(
+                      label: l.typeNow,
+                      icon: Icons.keyboard_outlined,
+                      fontSize: 16,
+                      onPressed: _manual,
+                    ),
                     const SizedBox(height: 8),
-                    Text(l.photoKept, textAlign: TextAlign.center, style: T.cap.copyWith(color: C.onDark)),
+                    Text(
+                      l.photoKept,
+                      textAlign: TextAlign.center,
+                      style: T.cap.copyWith(color: C.onDark),
+                    ),
                   ],
                 )
               : Column(
@@ -301,25 +386,38 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: TactileButton(
+                          child: _DarkDeckPill(
                             label: _flash ? l.flashOn : l.flashOff,
-                            icon: _flash ? Icons.flash_on : Icons.flash_off,
-                            height: 48,
-                            fontSize: 15,
-                            onPressed: () => setState(() => _flash = !_flash),
+                            icon: _flash ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                            active: _flash,
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _flash = !_flash);
+                            },
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
-                          child: TactileButton(label: l.typeManual, icon: Icons.keyboard_outlined, height: 48, fontSize: 15, onPressed: _manual),
+                          child: _DarkDeckPill(
+                            label: l.typeManual,
+                            icon: Icons.keyboard_outlined,
+                            active: false,
+                            onTap: _manual,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    TactileButton(label: l.takePhoto, icon: Icons.photo_camera_outlined, variant: BtnVariant.green, height: 64, fontSize: 19, onPressed: _take),
+                    TactileButton(
+                      label: l.takePhoto,
+                      icon: Icons.photo_camera_rounded,
+                      variant: BtnVariant.green,
+                      height: 60,
+                      fontSize: 18,
+                      onPressed: _take,
+                    ),
                   ],
                 ),
         ),
@@ -328,7 +426,70 @@ class _CameraScreenState extends State<CameraScreen> with SingleTickerProviderSt
   }
 }
 
-/// 75% black mask around the device-shaped cutout.
+class _DarkDeckPill extends StatelessWidget {
+  const _DarkDeckPill({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: active ? const Color(0x33F59E0B) : const Color(0xFF1F2937),
+        borderRadius: D.radius,
+        child: InkWell(
+          borderRadius: D.radius,
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: D.animFast,
+            curve: D.animCurve,
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: D.radius,
+              border: Border.all(
+                color: active ? const Color(0xFFF59E0B) : const Color(0x2EFFFFFF),
+                width: active ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 19, color: active ? const Color(0xFFFCD34D) : Colors.white),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.button.copyWith(
+                      fontSize: 14.5,
+                      color: active ? const Color(0xFFFEF3C7) : Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 68% translucent dark mask with smooth rounded cutout.
 class _MaskPainter extends CustomPainter {
   _MaskPainter(this.hole);
   final Rect hole;
@@ -338,39 +499,66 @@ class _MaskPainter extends CustomPainter {
     final path = Path()
       ..fillType = PathFillType.evenOdd
       ..addRect(Offset.zero & size)
-      ..addRRect(RRect.fromRectAndRadius(hole, const Radius.circular(4)));
-    canvas.drawPath(path, Paint()..color = const Color(0xBF000000));
+      ..addRRect(RRect.fromRectAndRadius(hole, const Radius.circular(18)));
+    canvas.drawPath(path, Paint()..color = const Color(0xB30F172A));
   }
 
   @override
   bool shouldRepaint(covariant _MaskPainter old) => old.hole != hole;
 }
 
-/// 3px green frame with thick corner ticks.
+/// Sleek rounded alignment frame with crisp emerald corner arcs.
 class _FramePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = C.frameGreen
+    const r = 18.0;
+    const arm = 26.0;
+    final rect = Offset.zero & size;
+
+    final subtleOutline = Paint()
+      ..color = C.frameGreen.withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    canvas.drawRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(4)), line);
+      ..strokeWidth = 1.5;
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(r)), subtleOutline);
+
     final corner = Paint()
       ..color = C.frameGreen
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.square;
-    const k = 24.0;
+      ..strokeWidth = 4.5
+      ..strokeCap = StrokeCap.round;
+
     final w = size.width;
     final h = size.height;
-    canvas.drawLine(const Offset(-4, -4), const Offset(k, -4), corner);
-    canvas.drawLine(const Offset(-4, -4), const Offset(-4, k), corner);
-    canvas.drawLine(Offset(w + 4, -4), Offset(w - k, -4), corner);
-    canvas.drawLine(Offset(w + 4, -4), Offset(w + 4, k), corner);
-    canvas.drawLine(Offset(-4, h + 4), Offset(k, h + 4), corner);
-    canvas.drawLine(Offset(-4, h + 4), Offset(-4, h - k), corner);
-    canvas.drawLine(Offset(w + 4, h + 4), Offset(w - k, h + 4), corner);
-    canvas.drawLine(Offset(w + 4, h + 4), Offset(w + 4, h - k), corner);
+
+    void drawCorner(Path p) => canvas.drawPath(p, corner);
+
+    // Top-left
+    drawCorner(Path()
+      ..moveTo(0, arm)
+      ..lineTo(0, r)
+      ..arcToPoint(const Offset(r, 0), radius: const Radius.circular(r))
+      ..lineTo(arm, 0));
+
+    // Top-right
+    drawCorner(Path()
+      ..moveTo(w - arm, 0)
+      ..lineTo(w - r, 0)
+      ..arcToPoint(Offset(w, r), radius: const Radius.circular(r))
+      ..lineTo(w, arm));
+
+    // Bottom-left
+    drawCorner(Path()
+      ..moveTo(0, h - arm)
+      ..lineTo(0, h - r)
+      ..arcToPoint(Offset(r, h), radius: const Radius.circular(r), clockwise: false)
+      ..lineTo(arm, h));
+
+    // Bottom-right
+    drawCorner(Path()
+      ..moveTo(w - arm, h)
+      ..lineTo(w - r, h)
+      ..arcToPoint(Offset(w, h - r), radius: const Radius.circular(r), clockwise: false)
+      ..lineTo(w, h - arm));
   }
 
   @override
