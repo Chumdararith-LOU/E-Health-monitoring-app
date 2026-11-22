@@ -1,5 +1,6 @@
-// Reports (FR-10, FR-11, US-10, US-11, US-18): period toggle, Min/Avg/Max
-// table (schema-driven, includes Admin custom fields), one chart per metric.
+// Reports (FR-10, FR-11, US-10, US-11, US-18): sliding period toggle,
+// Min/Avg/Max summary table (schema-driven, includes Admin custom fields),
+// and smooth touch-scrubbing charts.
 // Rith: swap the local maths for GET /patients/{id}/summary later.
 
 import 'package:flutter/material.dart';
@@ -51,7 +52,11 @@ class _ReportViewState extends State<ReportView> {
       context: context,
       firstDate: DateTime(today.year - 1, today.month, today.day),
       lastDate: today,
-      initialDateRange: _custom ?? DateTimeRange(start: DateTime(today.year, today.month, today.day - 13), end: today),
+      initialDateRange: _custom ??
+          DateTimeRange(
+            start: DateTime(today.year, today.month, today.day - 13),
+            end: today,
+          ),
     );
     if (!mounted || r == null) return;
     setState(() {
@@ -114,8 +119,100 @@ class _ReportViewState extends State<ReportView> {
     final flaggedDays = inRange.where((r) => r.flagged).map((r) => MockData.dateOnly(r.time)).toSet().length;
     final periodLabel = _period == _Period.custom ? l.dayRange(start, end) : l.days(_daysOf(_period));
 
+    final bodyCards = <Widget>[];
+    if (inRange.isEmpty) {
+      bodyCards.add(StatusAlertBanner(severity: Severity.info, message: l.noReadingsPeriod));
+    } else {
+      bodyCards.add(_summary(l, inRange, periodLabel, missed, flaggedDays));
+      bodyCards.add(
+        BoxedPanel(
+          leadingIcon: Icons.favorite_outline_rounded,
+          title: l.bp,
+          trailing: _unitPill('mmHg'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              bpChart(l, inRange, start, end, today: today),
+              const SizedBox(height: 10),
+              bpLegend(l),
+              const SizedBox(height: 6),
+              Text(l.tapPoint, style: T.cap),
+            ],
+          ),
+        ),
+      );
+      bodyCards.add(_fieldPanel(
+        l,
+        Fields.glu,
+        l.bloodGlucose,
+        inRange,
+        (r) => r.glucose,
+        start,
+        end,
+        today,
+        icon: Icons.water_drop_outlined,
+      ));
+      bodyCards.add(_fieldPanel(
+        l,
+        Fields.pul,
+        l.pulse,
+        inRange,
+        (r) => r.pulse?.toDouble(),
+        start,
+        end,
+        today,
+        icon: Icons.monitor_heart_outlined,
+      ));
+      for (final f in Fields.custom) {
+        bodyCards.add(_fieldPanel(
+          l,
+          f,
+          f.short(l.km),
+          inRange,
+          (r) => r.extra[f.id],
+          start,
+          end,
+          today,
+          custom: true,
+          icon: Icons.tune_rounded,
+        ));
+      }
+    }
+
+    final rangeKey = ValueKey<String>(
+      '${st.activePatientId}_${_period.name}_${start.millisecondsSinceEpoch}_${end.millisecondsSinceEpoch}_${inRange.length}',
+    );
+
     final children = <Widget>[
-      Text('${st.activePatient.name.of(l.km)} · ${l.dayY(start)} – ${l.dayY(end)}', style: T.bodySm.copyWith(fontWeight: FontWeight.w600)),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: C.panel,
+          borderRadius: D.radius,
+          border: Border.all(color: C.border),
+          boxShadow: D.panelShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: const BoxDecoration(color: C.navyTint, shape: BoxShape.circle),
+              child: const Icon(Icons.calendar_today_rounded, size: 17, color: C.navyBase),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(st.activePatient.name.of(l.km), style: T.bodyB.copyWith(fontSize: 15.5)),
+                  Text('${l.dayY(start)} – ${l.dayY(end)}', style: T.capSm),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
       SegmentedToggle<_Period>(
         semanticLabel: l.period,
         fontSize: 14,
@@ -134,56 +231,61 @@ class _ReportViewState extends State<ReportView> {
           }
         },
       ),
-    ];
-
-    if (inRange.isEmpty) {
-      children.add(StatusAlertBanner(severity: Severity.info, message: l.noReadingsPeriod));
-    } else {
-      children.add(_summary(l, inRange, periodLabel, missed, flaggedDays));
-      children.add(BoxedPanel(
-        title: l.bp,
-        trailing: Text('mmHg', style: T.cap),
+      AnimatedSwitcher(
+        duration: D.animMed,
+        switchInCurve: D.animCurve,
+        switchOutCurve: D.animCurve,
+        child: Column(
+          key: rangeKey,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: gapped(bodyCards, 14),
+        ),
+      ),
+      BoxedPanel(
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            bpChart(l, inRange, start, end, today: today),
+            TactileButton(
+              label: l.exportPdf,
+              icon: Icons.download_rounded,
+              variant: BtnVariant.navy,
+              onPressed: inRange.isEmpty
+                  ? null
+                  : () => showConfirmModal<bool>(
+                        context,
+                        title: l.pdfLaterTitle,
+                        message: l.pdfLaterBody,
+                        tone: Severity.info,
+                        actions: [ModalAction<bool>(l.ok, true, variant: BtnVariant.navy)],
+                      ),
+            ),
             const SizedBox(height: 8),
-            bpLegend(l),
-            const SizedBox(height: 4),
-            Text(l.tapPoint, style: T.cap),
+            Text(
+              inRange.isEmpty ? l.exportDisabled : l.exportHint,
+              textAlign: TextAlign.center,
+              style: T.cap,
+            ),
           ],
         ),
-      ));
-      children.add(_fieldPanel(l, Fields.glu, l.bloodGlucose, inRange, (r) => r.glucose, start, end, today));
-      children.add(_fieldPanel(l, Fields.pul, l.pulse, inRange, (r) => r.pulse?.toDouble(), start, end, today));
-      for (final f in Fields.custom) {
-        children.add(_fieldPanel(l, f, f.short(l.km), inRange, (r) => r.extra[f.id], start, end, today, custom: true));
-      }
-    }
+      ),
+    ];
 
-    children.add(Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TactileButton(
-          label: l.exportPdf,
-          icon: Icons.download_outlined,
-          onPressed: inRange.isEmpty
-              ? null
-              : () => showConfirmModal<bool>(
-                    context,
-                    title: l.pdfLaterTitle,
-                    message: l.pdfLaterBody,
-                    tone: Severity.info,
-                    actions: [ModalAction<bool>(l.ok, true, variant: BtnVariant.navy)],
-                  ),
-        ),
-        const SizedBox(height: 6),
-        Text(inRange.isEmpty ? l.exportDisabled : l.exportHint, textAlign: TextAlign.center, style: T.cap),
-      ],
-    ));
-
-    return ListView(padding: const EdgeInsets.all(16), children: gapped(children, 16));
+    return ListView(
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: gapped(children, 14),
+    );
   }
+
+  Widget _unitPill(String unit) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+        decoration: const BoxDecoration(
+          color: C.inputUnit,
+          borderRadius: D.radiusPill,
+        ),
+        child: Text(unit, style: T.capSm.copyWith(fontWeight: FontWeight.w600)),
+      );
 
   Widget _summary(L l, List<Reading> rs, String periodLabel, int missed, int flaggedDays) {
     final rows = <Widget>[];
@@ -212,35 +314,45 @@ class _ReportViewState extends State<ReportView> {
     }
 
     return BoxedPanel(
+      leadingIcon: Icons.analytics_outlined,
       title: l.summaryOf(periodLabel),
       padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                StatusBadge(label: l.readingsCount(rs.length)),
-                StatusBadge(label: l.missedDays(missed), tone: BadgeTone.warn, icon: Icons.schedule),
-                StatusBadge(label: l.flaggedDays(flaggedDays), tone: BadgeTone.crit, icon: Icons.error_outline),
+                StatusBadge(label: l.readingsCount(rs.length), tone: BadgeTone.info, icon: Icons.fact_check_outlined),
+                StatusBadge(label: l.missedDays(missed), tone: BadgeTone.warn, icon: Icons.schedule_rounded),
+                StatusBadge(label: l.flaggedDays(flaggedDays), tone: BadgeTone.crit, icon: Icons.error_rounded),
               ],
             ),
           ),
           Container(
             decoration: const BoxDecoration(
               color: C.panelHeader,
-              border: Border(top: BorderSide(color: C.border), bottom: BorderSide(color: C.border)),
+              border: Border(top: BorderSide(color: C.divider), bottom: BorderSide(color: C.divider)),
             ),
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                Expanded(flex: 7, child: Padding(padding: const EdgeInsets.only(left: 14), child: Text(l.colMeasure, style: _th))),
+                Expanded(
+                  flex: 7,
+                  child: Padding(padding: const EdgeInsets.only(left: 16), child: Text(l.colMeasure, style: _th)),
+                ),
                 Expanded(flex: 4, child: Text(l.colMin, textAlign: TextAlign.right, style: _th)),
                 Expanded(flex: 4, child: Text(l.colAvg, textAlign: TextAlign.right, style: _th)),
-                Expanded(flex: 5, child: Padding(padding: const EdgeInsets.only(right: 14), child: Text(l.colMax, textAlign: TextAlign.right, style: _th))),
+                Expanded(
+                  flex: 5,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Text(l.colMax, textAlign: TextAlign.right, style: _th),
+                  ),
+                ),
               ],
             ),
           ),
@@ -250,23 +362,40 @@ class _ReportViewState extends State<ReportView> {
     );
   }
 
-  static const _th = TextStyle(fontFamily: T.f, fontSize: 14, fontWeight: FontWeight.w700, height: 1.55, color: C.text);
+  static const _th = TextStyle(
+    fontFamily: T.f,
+    fontSize: 13.5,
+    fontWeight: FontWeight.w700,
+    height: 1.5,
+    color: C.text2,
+  );
 
-  Widget _fieldPanel(L l, VitalField f, String title, List<Reading> rs, double? Function(Reading) pick, DateTime start, DateTime end, DateTime today,
-      {bool custom = false}) {
+  Widget _fieldPanel(
+    L l,
+    VitalField f,
+    String title,
+    List<Reading> rs,
+    double? Function(Reading) pick,
+    DateTime start,
+    DateTime end,
+    DateTime today, {
+    bool custom = false,
+    IconData? icon,
+  }) {
     final has = rs.any((r) => pick(r) != null);
     if (!has) return const SizedBox.shrink();
     return BoxedPanel(
+      leadingIcon: icon,
       title: title,
-      trailing: custom ? StatusBadge(label: l.extraField) : Text(f.unit, style: T.cap),
+      trailing: custom ? StatusBadge(label: l.extraField) : _unitPill(f.unit),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           fieldChart(l, f, rs, pick, start, end, today: today),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 14,
-            runSpacing: 4,
+            runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               LegendLine(label: f.short(l.km), color: C.navyBase),
@@ -315,40 +444,50 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const numStyle = TextStyle(fontFamily: T.f, fontSize: 17, fontWeight: FontWeight.w600, height: 1.5, color: C.text, fontFeatures: T.tabular);
+    const numStyle = TextStyle(
+      fontFamily: T.f,
+      fontSize: 16.5,
+      fontWeight: FontWeight.w600,
+      height: 1.5,
+      color: C.text,
+      fontFeatures: T.tabular,
+    );
     final flagStyle = numStyle.copyWith(color: C.errText, fontWeight: FontWeight.w700);
     return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 64),
+      constraints: const BoxConstraints(minHeight: 68),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             flex: 7,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+              padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name, style: T.h.copyWith(fontSize: 15)),
                   Text(sub, style: T.capSm.copyWith(fontFeatures: T.tabular)),
                   if (flaggedText != null) ...[
-                    const SizedBox(height: 2),
-                    StatusBadge(label: flaggedText!, tone: BadgeTone.crit, icon: Icons.error_outline),
+                    const SizedBox(height: 4),
+                    StatusBadge(label: flaggedText!, tone: BadgeTone.crit, icon: Icons.error_rounded),
                   ],
                   if (extraLabel != null) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     StatusBadge(label: extraLabel!),
                   ],
                 ],
               ),
             ),
           ),
-          Expanded(flex: 4, child: Text(minLow ? '$min ▼' : min, textAlign: TextAlign.right, style: minLow ? flagStyle : numStyle)),
+          Expanded(
+            flex: 4,
+            child: Text(minLow ? '$min ▼' : min, textAlign: TextAlign.right, style: minLow ? flagStyle : numStyle),
+          ),
           Expanded(flex: 4, child: Text(avg, textAlign: TextAlign.right, style: numStyle)),
           Expanded(
             flex: 5,
             child: Padding(
-              padding: const EdgeInsets.only(right: 14),
+              padding: const EdgeInsets.only(right: 16),
               child: Text(maxHigh ? '$max ▲' : max, textAlign: TextAlign.right, style: maxHigh ? flagStyle : numStyle),
             ),
           ),

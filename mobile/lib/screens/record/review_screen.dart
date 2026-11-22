@@ -1,8 +1,9 @@
-// Record step 3: split-screen review (photo pinned on top, form below),
-// also used for "Type manually" and for editing a reading from History.
+// Record step 3: split-screen review (collapsible pinned photo dock on top,
+// modern grouped form below), also used for "Type manually" and History edits.
 // Two-tier validation (FR-06): hard stops block Save, soft flags warn.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
@@ -46,7 +47,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
   final _pul = TextEditingController();
   final _glu = TextEditingController();
   final _note = TextEditingController();
-  final Map<String, TextEditingController> _extra = {for (final f in Fields.custom) f.id: TextEditingController()};
+  final Map<String, TextEditingController> _extra = {
+    for (final f in Fields.custom) f.id: TextEditingController(),
+  };
 
   GlucoseUnit _unit = GlucoseUnit.mgdl;
   final Map<String, Conf> _conf = <String, Conf>{};
@@ -54,6 +57,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   bool _bpPhoto = false;
   bool _gluPhoto = false;
+  bool _photoCollapsed = false;
   DeviceMode _shown = DeviceMode.bp;
   bool _bpFailed = false;
   bool _gluFailed = false;
@@ -141,6 +145,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   void _apply(OcrResult r) {
     _offlineOcr = r.offline;
+    _photoCollapsed = false;
     if (r.mode == DeviceMode.bp) {
       _bpPhoto = true;
       _shown = DeviceMode.bp;
@@ -185,7 +190,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
         return;
       }
       if (!f.inHardLimits(v)) {
-        c.hard[id] = _Issue(Severity.error, l.hardRange(f.short(l.km), f.fmt(f.hardMin), f.fmt(f.hardMax), f.unit));
+        c.hard[id] = _Issue(
+          Severity.error,
+          l.hardRange(f.short(l.km), f.fmt(f.hardMin), f.fmt(f.hardMax), f.unit),
+        );
         return;
       }
       final s = f.status(v);
@@ -206,8 +214,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
     final sysT = _sys.text.trim();
     final diaT = _dia.text.trim();
-    if (sysT.isNotEmpty && diaT.isEmpty) c.hard['dia'] = _Issue(Severity.error, l.requiredField(Fields.dia.short(l.km)));
-    if (diaT.isNotEmpty && sysT.isEmpty) c.hard['sys'] = _Issue(Severity.error, l.requiredField(Fields.sys.short(l.km)));
+    if (sysT.isNotEmpty && diaT.isEmpty) {
+      c.hard['dia'] = _Issue(Severity.error, l.requiredField(Fields.dia.short(l.km)));
+    }
+    if (diaT.isNotEmpty && sysT.isEmpty) {
+      c.hard['sys'] = _Issue(Severity.error, l.requiredField(Fields.sys.short(l.km)));
+    }
 
     final s = double.tryParse(sysT);
     final d = double.tryParse(diaT);
@@ -222,6 +234,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   void _swapBp() {
+    HapticFeedback.selectionClick();
     final a = _sys.text;
     _sys.text = _dia.text;
     _dia.text = a;
@@ -272,7 +285,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
     if (_editing) {
       final e = widget.editing!;
-      final method = e.method == EntryMethod.manual ? EntryMethod.manual : (_changed ? EntryMethod.ocrEdited : e.method);
+      final method = e.method == EntryMethod.manual
+          ? EntryMethod.manual
+          : (_changed ? EntryMethod.ocrEdited : e.method);
+      HapticFeedback.mediumImpact();
       st.updateReading(Reading(
         id: e.id,
         patientId: e.patientId,
@@ -303,7 +319,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         context,
         title: l.dupTitle,
         tone: Severity.warn,
-        icon: Icons.schedule,
+        icon: Icons.schedule_rounded,
         body: _dupBody(l, existing, now, sys, dia, pul, glu),
         actions: [
           ModalAction<String>(l.dupReplace, 'replace', variant: BtnVariant.navy),
@@ -315,6 +331,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
       replace = choice == 'replace';
     }
 
+    HapticFeedback.mediumImpact();
     setState(() {
       _saving = true;
       _allowPop = true;
@@ -349,45 +366,51 @@ class _ReviewScreenState extends State<ReviewScreen> {
       return l.n(parts.join(' · '));
     }
 
-    Widget row(String label, String value, {bool header = false}) => Container(
-          decoration: BoxDecoration(
-            color: header ? C.panelHeader : null,
-            border: header ? const Border(bottom: BorderSide(color: C.border)) : null,
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  width: 104,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: C.border))),
-                  child: Text(label, style: T.bodySm.copyWith(fontWeight: FontWeight.w700, fontFeatures: T.tabular)),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Text(value, style: T.bodySm.copyWith(fontFeatures: T.tabular)),
+    Widget row(String label, String value, {bool highlight = false}) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          color: highlight ? C.navyTint.withValues(alpha: 0.35) : C.panelHeader,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 112,
+                child: Text(
+                  label,
+                  style: T.cap.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: highlight ? C.navyBase : C.text2,
+                    fontFeatures: T.tabular,
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  style: T.bodyB.copyWith(fontSize: 15.5, fontFeatures: T.tabular),
+                ),
+              ),
+            ],
           ),
         );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l.dupBody(l.time(old.time)), style: T.body),
+        Text(l.dupBody(l.time(old.time)), style: T.body.copyWith(color: C.text2)),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(border: Border.all(color: C.border), borderRadius: D.radius),
+          decoration: BoxDecoration(
+            border: Border.all(color: C.border),
+            borderRadius: D.radius,
+          ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(11),
             child: Column(
               children: [
-                row('${l.earlier} ${l.time(old.time)}', vals(old.systolic, old.diastolic, old.pulse, old.glucose), header: true),
-                row('${l.newer} ${l.time(now)}', vals(sys, dia, pul, glu)),
+                row('${l.earlier} ${l.time(old.time)}', vals(old.systolic, old.diastolic, old.pulse, old.glucose)),
+                const Divider(height: 1, color: C.divider),
+                row('${l.newer} ${l.time(now)}', vals(sys, dia, pul, glu), highlight: true),
               ],
             ),
           ),
@@ -412,11 +435,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
         severity: Severity.error,
         message: _hasPhoto ? l.errorBanner : l.errorBannerNoPhoto,
         action: v.bpOrder
-            ? TactileButton(label: l.swapBp, icon: Icons.swap_vert, height: 44, fontSize: 15, expand: false, onPressed: _swapBp)
+            ? TactileButton(
+                label: l.swapBp,
+                icon: Icons.swap_vert_rounded,
+                height: 44,
+                fontSize: 15,
+                expand: false,
+                onPressed: _swapBp,
+              )
             : null,
       );
     } else if (_offlineOcr) {
-      banner = StatusAlertBanner(severity: Severity.warn, message: l.ocrOffline, icon: Icons.wifi_off);
+      banner = StatusAlertBanner(severity: Severity.warn, message: l.ocrOffline, icon: Icons.cloud_off_rounded);
     } else if (_bpFailed || _gluFailed) {
       banner = StatusAlertBanner(severity: Severity.warn, message: l.ocrFailed);
     } else if (anyLow) {
@@ -439,15 +469,43 @@ class _ReviewScreenState extends State<ReviewScreen> {
     }
 
     final children = <Widget>[
-      if (banner != null) banner,
-      _field(l, v, Fields.sys, 'sys', l.example('120')),
-      _field(l, v, Fields.dia, 'dia', l.example('80')),
-      _field(l, v, Fields.pul, 'pul', l.example('72')),
+      AnimatedSize(
+        duration: D.animMed,
+        curve: D.animCurve,
+        alignment: Alignment.topCenter,
+        child: banner ?? const SizedBox.shrink(),
+      ),
+      BoxedPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: gapped([
+            _field(l, v, Fields.sys, 'sys', l.example('120')),
+            _field(l, v, Fields.dia, 'dia', l.example('80')),
+            _field(l, v, Fields.pul, 'pul', l.example('72')),
+          ], 16),
+        ),
+      ),
       _glucoseCard(l, v),
-      if (Fields.custom.isNotEmpty) _separator(l.extraFields),
-      for (final f in Fields.custom) _field(l, v, f, f.id, l.example(f.id == 'wt' ? '62.5' : '0')),
-      _noteField(l),
-      if (v.flagged && !v.hasErrors) StatusAlertBanner(severity: Severity.info, message: l.flagNotice),
+      if (Fields.custom.isNotEmpty) ...[
+        _separator(l.extraFields),
+        BoxedPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: gapped([
+              for (final f in Fields.custom) _field(l, v, f, f.id, l.example(f.id == 'wt' ? '62.5' : '0')),
+            ], 16),
+          ),
+        ),
+      ],
+      BoxedPanel(child: _noteField(l)),
+      AnimatedSize(
+        duration: D.animMed,
+        curve: D.animCurve,
+        alignment: Alignment.topCenter,
+        child: (v.flagged && !v.hasErrors)
+            ? StatusAlertBanner(severity: Severity.info, message: l.flagNotice)
+            : const SizedBox.shrink(),
+      ),
     ];
 
     final canSave = !v.hasErrors && v.hasData && !_saving;
@@ -471,8 +529,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
             if (_hasPhoto) _photoPane(l),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-                children: gapped(children, 18),
+                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                children: gapped(children, 14),
               ),
             ),
             _footer(l, v, canSave),
@@ -484,16 +543,28 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   Widget _caretakerContext(L l, AppState st) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: const BoxDecoration(color: C.warnBg, border: Border(bottom: BorderSide(color: C.warnBorder, width: 2))),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: const BoxDecoration(
+        color: C.warnBg,
+        border: Border(bottom: BorderSide(color: C.warnDivider)),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.person_outline, size: 20, color: C.warnText),
-          const SizedBox(width: 8),
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              shape: BoxShape.circle,
+              border: Border.all(color: C.warnDivider),
+            ),
+            child: const Icon(Icons.person_outline_rounded, size: 16, color: C.warnText),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               '${l.recordingFor} ${st.activePatient.name.of(l.km)}',
-              style: T.bodySm.copyWith(color: C.warnText, fontWeight: FontWeight.w700),
+              style: T.bodySm.copyWith(color: C.warnText, fontWeight: FontWeight.w700, height: 1.5),
             ),
           ),
         ],
@@ -502,115 +573,222 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Widget _photoPane(L l) {
-    final paneH = (MediaQuery.of(context).size.height * 0.23).clamp(150.0, 210.0).toDouble();
+    final paneH = (MediaQuery.of(context).size.height * 0.21).clamp(142.0, 198.0).toDouble();
     final lowPulse = _conf['pul'] == Conf.low;
 
-    Widget thumb({required bool selected, required Widget child, required VoidCallback onTap, required String label, bool dashed = false}) {
+    Widget thumb({
+      required bool selected,
+      required Widget child,
+      required VoidCallback onTap,
+      required String label,
+      bool emptySlot = false,
+    }) {
       return Semantics(
         button: true,
         selected: selected,
         label: label,
         excludeSemantics: true,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: 66,
-            height: 66,
-            decoration: BoxDecoration(
-              color: dashed ? null : C.lcd,
-              border: Border.all(color: selected ? C.frameGreen : C.borderStrong, width: selected ? 3 : 2),
-              borderRadius: D.radius,
+        child: Material(
+          color: emptySlot ? const Color(0xFF1F2937) : C.lcd,
+          borderRadius: D.radius,
+          child: InkWell(
+            borderRadius: D.radius,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            child: AnimatedContainer(
+              duration: D.animFast,
+              curve: D.animCurve,
+              width: 66,
+              height: 62,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: selected ? C.frameGreen : const Color(0x3DFFFFFF),
+                  width: selected ? 2.5 : 1.25,
+                ),
+                borderRadius: D.radius,
+              ),
+              alignment: Alignment.center,
+              child: child,
             ),
-            alignment: Alignment.center,
-            child: child,
           ),
         ),
       );
     }
 
-    final lcdSmall = TextStyle(fontFamily: T.lcdFamily, fontSize: 18, color: C.lcdText, fontFeatures: T.tabular);
+    final lcdSmall = TextStyle(
+      fontFamily: T.lcdFamily,
+      fontSize: 18,
+      color: C.lcdText,
+      fontFeatures: T.tabular,
+    );
 
     return Container(
-      decoration: const BoxDecoration(color: C.cameraBg, border: Border(bottom: BorderSide(color: C.borderStrong, width: 2))),
+      decoration: const BoxDecoration(
+        color: C.cameraDeck,
+        border: Border(bottom: BorderSide(color: Color(0x26FFFFFF))),
+        boxShadow: [BoxShadow(color: Color(0x1F0F172A), blurRadius: 10, offset: Offset(0, 3))],
+      ),
       child: Column(
         children: [
-          SizedBox(
-            height: paneH,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
+          AnimatedSize(
+            duration: D.animMed,
+            curve: D.animCurve,
+            alignment: Alignment.topCenter,
+            child: _photoCollapsed
+                ? const SizedBox.shrink()
+                : SizedBox(
+                    height: paneH,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _zoom,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: C.cameraBg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0x26FFFFFF)),
+                                ),
+                                padding: const EdgeInsets.all(8),
+                                child: Center(
+                                  child: FittedBox(
+                                    child: _shown == DeviceMode.bp
+                                        ? DeviceLcd(
+                                            mode: DeviceMode.bp,
+                                            sys: _truthSys,
+                                            dia: _truthDia,
+                                            pul: _truthPul,
+                                            dimPulse: lowPulse,
+                                          )
+                                        : DeviceLcd(
+                                            mode: DeviceMode.glucose,
+                                            glu: _truthGlu,
+                                            unit: _unit == GlucoseUnit.mgdl ? 'mg/dL' : 'mmol/L',
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              thumb(
+                                selected: _shown == DeviceMode.bp && _bpPhoto,
+                                label: l.modeBp,
+                                emptySlot: !_bpPhoto,
+                                onTap: () {
+                                  if (_bpPhoto) {
+                                    setState(() => _shown = DeviceMode.bp);
+                                  } else {
+                                    _capture(DeviceMode.bp);
+                                  }
+                                },
+                                child: _bpPhoto
+                                    ? Text('BP', style: lcdSmall)
+                                    : Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.favorite_outline_rounded, color: C.onDark, size: 19),
+                                          Text(
+                                            l.bp,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: T.capSm.copyWith(color: C.onDark, fontSize: 11.5, height: 1.3),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                              const SizedBox(height: 8),
+                              thumb(
+                                selected: _shown == DeviceMode.glucose && _gluPhoto,
+                                label: l.modeGlu,
+                                emptySlot: !_gluPhoto,
+                                onTap: () {
+                                  if (_gluPhoto) {
+                                    setState(() => _shown = DeviceMode.glucose);
+                                  } else {
+                                    _capture(DeviceMode.glucose);
+                                  }
+                                },
+                                child: _gluPhoto
+                                    ? Text(_truthGlu, style: lcdSmall)
+                                    : Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.water_drop_outlined, color: C.onDark, size: 19),
+                                          Text(
+                                            l.glucose,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: T.capSm.copyWith(color: C.onDark, fontSize: 11.5, height: 1.3),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _DockActionPill(
+                    label: l.zoom,
+                    icon: Icons.zoom_in_rounded,
+                    onTap: _zoom,
+                  ),
+                ),
+                if (!_editing) ...[
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => _zoom(),
-                      child: Center(
-                        child: FittedBox(
-                          child: _shown == DeviceMode.bp
-                              ? DeviceLcd(mode: DeviceMode.bp, sys: _truthSys, dia: _truthDia, pul: _truthPul, dimPulse: lowPulse)
-                              : DeviceLcd(mode: DeviceMode.glucose, glu: _truthGlu, unit: _unit == GlucoseUnit.mgdl ? 'mg/dL' : 'mmol/L'),
+                    child: _DockActionPill(
+                      label: l.retake,
+                      icon: Icons.refresh_rounded,
+                      onTap: () => _capture(_shown),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                Semantics(
+                  button: true,
+                  label: _shown == DeviceMode.bp ? l.modeBp : l.modeGlu,
+                  excludeSemantics: true,
+                  child: Material(
+                    color: const Color(0xFF1F2937),
+                    borderRadius: D.radius,
+                    child: InkWell(
+                      borderRadius: D.radius,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _photoCollapsed = !_photoCollapsed);
+                      },
+                      child: Container(
+                        width: 44,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: D.radius,
+                          border: Border.all(color: const Color(0x2EFFFFFF)),
+                        ),
+                        child: Icon(
+                          _photoCollapsed ? Icons.expand_more_rounded : Icons.expand_less_rounded,
+                          color: Colors.white,
+                          size: 22,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      thumb(
-                        selected: _shown == DeviceMode.bp && _bpPhoto,
-                        label: l.modeBp,
-                        dashed: !_bpPhoto,
-                        onTap: () {
-                          if (_bpPhoto) {
-                            setState(() => _shown = DeviceMode.bp);
-                          } else {
-                            _capture(DeviceMode.bp);
-                          }
-                        },
-                        child: _bpPhoto
-                            ? Text('BP', style: lcdSmall)
-                            : Column(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.favorite_border, color: C.onDark, size: 20),
-                                Text(l.bp, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.capSm.copyWith(color: C.onDark, height: 1.3)),
-                              ]),
-                      ),
-                      const SizedBox(height: 8),
-                      thumb(
-                        selected: _shown == DeviceMode.glucose && _gluPhoto,
-                        label: l.modeGlu,
-                        dashed: !_gluPhoto,
-                        onTap: () {
-                          if (_gluPhoto) {
-                            setState(() => _shown = DeviceMode.glucose);
-                          } else {
-                            _capture(DeviceMode.glucose);
-                          }
-                        },
-                        child: _gluPhoto
-                            ? Text(_truthGlu, style: lcdSmall)
-                            : Column(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.water_drop_outlined, color: C.onDark, size: 20),
-                                Text(l.glucose, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.capSm.copyWith(color: C.onDark, height: 1.3)),
-                              ]),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(color: C.grid, border: Border(top: BorderSide(color: C.borderStrong))),
-            child: Row(
-              children: [
-                Expanded(child: TactileButton(label: l.zoom, icon: Icons.zoom_in, height: 44, fontSize: 15, onPressed: _zoom)),
-                if (!_editing) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TactileButton(label: l.retake, icon: Icons.refresh, height: 44, fontSize: 15, onPressed: () => _capture(_shown)),
-                  ),
-                ],
+                ),
               ],
             ),
           ),
@@ -620,6 +798,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   void _zoom() {
+    HapticFeedback.selectionClick();
     showPhotoDialog(
       context,
       mode: _shown,
@@ -632,10 +811,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Widget? _badge(L l, String id, _Check v) {
-    if (v.hard.containsKey(id)) return StatusBadge(label: l.badgeWrong, tone: BadgeTone.crit, icon: Icons.cancel_outlined);
+    if (v.hard.containsKey(id)) return StatusBadge(label: l.badgeWrong, tone: BadgeTone.crit, icon: Icons.error_rounded);
     final fromOcr = _fromOcr(id);
-    if (fromOcr && _conf[id] == Conf.low) return StatusBadge(label: l.badgeCheck, tone: BadgeTone.warn, icon: Icons.warning_amber_rounded);
-    if (fromOcr) return const StatusBadge(label: 'OCR', tone: BadgeTone.ok, icon: Icons.check);
+    if (fromOcr && _conf[id] == Conf.low) {
+      return StatusBadge(label: l.badgeCheck, tone: BadgeTone.warn, icon: Icons.warning_rounded);
+    }
+    if (fromOcr) return const StatusBadge(label: 'OCR', tone: BadgeTone.ok, icon: Icons.check_rounded);
     if (_ocrValues.containsKey(id) && _ctl(id).text.trim().isNotEmpty) {
       return StatusBadge(label: l.badgeEdited, icon: Icons.edit_outlined);
     }
@@ -652,16 +833,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final hints = <Widget>[];
     final hard = v.hard[id];
     if (hard != null) {
-      hints.add(FieldHint(severity: Severity.error, text: hard.text, icon: Icons.cancel_outlined));
+      hints.add(FieldHint(severity: Severity.error, text: hard.text, icon: Icons.error_rounded));
     } else {
       if (_fromOcr(id) && _conf[id] == Conf.low) {
-        hints.add(FieldHint(severity: Severity.warn, text: l.verifyField, icon: Icons.info_outline));
+        hints.add(FieldHint(severity: Severity.warn, text: l.verifyField, icon: Icons.info_outline_rounded));
       }
       final soft = v.soft[id];
       if (soft != null) hints.add(FieldHint(severity: Severity.warn, text: soft.text));
     }
     if (hints.isEmpty) return null;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(hints, 2));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(hints, 3));
   }
 
   Widget _field(L l, _Check v, VitalField f, String id, String hint) {
@@ -684,15 +865,20 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final f = _gluField;
     Widget? badge = _badge(l, 'glu', v);
     if (badge == null && _glu.text.trim().isEmpty && _bpPhoto) badge = StatusBadge(label: l.badgeEmpty);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: C.panel, border: Border.all(color: C.border), borderRadius: D.radius),
+    return BoxedPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (!_gluPhoto && !_editing) ...[
-            TactileButton(label: l.scanGlucose, icon: Icons.photo_camera_outlined, height: 52, fontSize: 16, onPressed: () => _capture(DeviceMode.glucose)),
-            const SizedBox(height: 10),
+            TactileButton(
+              label: l.scanGlucose,
+              icon: Icons.photo_camera_outlined,
+              variant: BtnVariant.navy,
+              height: 50,
+              fontSize: 15.5,
+              onPressed: () => _capture(DeviceMode.glucose),
+            ),
+            const SizedBox(height: 14),
           ],
           VitalInputGroup(
             label: f.label(l.km),
@@ -705,7 +891,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             message: _messages(l, 'glu', v),
             onChanged: (_) => _edited(),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           SegmentedToggle<GlucoseUnit>(
             semanticLabel: l.glucoseUnit,
             height: 44,
@@ -722,12 +908,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Widget _separator(String text) {
-    return Row(
-      children: [
-        const Expanded(child: Divider(color: C.border, height: 1)),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text(text, style: T.cap.copyWith(fontWeight: FontWeight.w700))),
-        const Expanded(child: Divider(color: C.border, height: 1)),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          const Expanded(child: Divider(color: C.border, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(text, style: T.cap.copyWith(fontWeight: FontWeight.w700, color: C.hint)),
+          ),
+          const Expanded(child: Divider(color: C.border, height: 1)),
+        ],
+      ),
     );
   }
 
@@ -736,7 +928,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(l.noteLabel, style: T.label),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         TextField(
           controller: _note,
           minLines: 3,
@@ -744,15 +936,22 @@ class _ReviewScreenState extends State<ReviewScreen> {
           maxLength: 200,
           onChanged: (_) => _edited(),
           style: T.body,
+          cursorColor: C.focus,
           decoration: InputDecoration(
             hintText: l.noteHint,
-            hintStyle: T.body.copyWith(color: C.hint),
+            hintStyle: T.body.copyWith(color: C.muted),
             filled: true,
-            fillColor: C.panel,
+            fillColor: C.inputUnit,
             counterText: '',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            enabledBorder: const OutlineInputBorder(borderRadius: D.radius, borderSide: BorderSide(color: C.borderInput)),
-            focusedBorder: const OutlineInputBorder(borderRadius: D.radius, borderSide: BorderSide(color: C.focus, width: 2)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            enabledBorder: const OutlineInputBorder(
+              borderRadius: D.radius,
+              borderSide: BorderSide(color: C.border, width: 1.25),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: D.radius,
+              borderSide: BorderSide(color: C.focus, width: 2),
+            ),
           ),
         ),
       ],
@@ -769,8 +968,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
     return Container(
       decoration: const BoxDecoration(
         color: C.panel,
-        border: Border(top: BorderSide(color: C.borderStrong)),
-        boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, -2))],
+        border: Border(top: BorderSide(color: C.divider)),
+        boxShadow: D.navShadow,
       ),
       child: SafeArea(
         top: false,
@@ -782,21 +981,78 @@ class _ReviewScreenState extends State<ReviewScreen> {
             children: [
               TactileButton(
                 label: l.save,
-                icon: Icons.check,
+                icon: Icons.check_rounded,
                 variant: BtnVariant.green,
-                fontSize: 18,
+                height: 58,
+                fontSize: 17.5,
                 loading: _saving,
                 onPressed: canSave ? () => _save(l) : null,
               ),
-              if (why != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  why,
-                  textAlign: TextAlign.center,
-                  style: T.cap.copyWith(color: v.hasErrors ? C.errText : C.text2, fontWeight: FontWeight.w600),
+              AnimatedSize(
+                duration: D.animFast,
+                curve: D.animCurve,
+                child: why != null
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          why,
+                          textAlign: TextAlign.center,
+                          style: T.cap.copyWith(
+                            color: v.hasErrors ? C.errText : C.text2,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DockActionPill extends StatelessWidget {
+  const _DockActionPill({required this.label, required this.icon, required this.onTap});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: const Color(0xFF1F2937),
+        borderRadius: D.radius,
+        child: InkWell(
+          borderRadius: D.radius,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: D.radius,
+              border: Border.all(color: const Color(0x2EFFFFFF)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: Colors.white),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.button.copyWith(fontSize: 14, color: Colors.white),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
