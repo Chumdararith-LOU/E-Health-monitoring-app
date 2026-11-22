@@ -84,4 +84,5 @@ export interface Session {
   role: 'doctor' | 'admin';
   name: Bi;
   expiresAt: number;
+  token?: string;
 }

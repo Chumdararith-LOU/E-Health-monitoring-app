@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { buildSampleData, DEMO_ACCOUNTS, ADMIN_NAME, DOCTOR_NAME, CORE_FIELDS } from '../data/mock';
 import type { ClinicalNote, Lang, Role, Session, User, VitalField } from '../data/types';
 import { makeFormat, STRINGS, type Format, type Strings } from '../i18n/strings';
+import { apiDevLogin } from '../lib/api';
 
 /** Dev-only switch to show each of the 5 required screen states. */
 export type Simulate = 'none' | 'loading' | 'empty' | 'error' | 'offline' | 'revoked';
@@ -43,7 +44,7 @@ interface AppValue {
   session: Session | null;
   sessionExpired: boolean;
   login: (id: string, password: string) => boolean;
-  devLogin: (role: 'doctor' | 'admin') => void;
+  devLogin: (role: 'doctor' | 'admin') => Promise<void>;
   logout: () => void;
 
   simulate: Simulate;
@@ -97,8 +98,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const devLogin = useCallback(
-    (role: 'doctor' | 'admin') =>
-      startSession(role === 'doctor' ? { userId: 'u-vannak', role, name: DOCTOR_NAME } : { userId: 'u-rathana', role, name: ADMIN_NAME }),
+    async (role: 'doctor' | 'admin') => {
+      const fallback =
+        role === 'doctor'
+          ? { userId: 'u-vannak', role, name: DOCTOR_NAME }
+          : { userId: 'u-rathana', role, name: ADMIN_NAME };
+      try {
+        const { token, user } = await apiDevLogin(role);
+        startSession({
+          userId: user.id,
+          role,
+          name: { km: user.name, en: user.name },
+          token,
+        });
+      } catch {
+        // API not running — fall back to mock session so standalone demos still work.
+        startSession(fallback);
+      }
+    },
     [startSession],
   );
 

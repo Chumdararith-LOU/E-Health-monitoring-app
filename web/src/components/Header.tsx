@@ -101,8 +101,8 @@ function DevStrip() {
         <button
           type="button"
           aria-pressed={session?.role === 'doctor'}
-          onClick={() => {
-            devLogin('doctor');
+          onClick={async () => {
+            await devLogin('doctor');
             navigate('/doctor');
           }}
         >
@@ -111,13 +111,16 @@ function DevStrip() {
         <button
           type="button"
           aria-pressed={session?.role === 'admin'}
-          onClick={() => {
-            devLogin('admin');
+          onClick={async () => {
+            await devLogin('admin');
             navigate('/admin/users');
           }}
         >
           Admin
         </button>
+        <span>
+          api: <b>{session?.token ? 'live' : 'mock'}</b>
+        </span>
         <span style={{ color: 'var(--text2)' }}>Patient · Caretaker · Family → mobile app</span>
         <span>state:</span>
         {SIMS.map((s) => (
