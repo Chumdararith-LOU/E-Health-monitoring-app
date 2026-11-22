@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/tokens.dart';
 
@@ -21,7 +24,7 @@ class ChartSeries {
     required this.color,
     this.dashed = false,
     this.marker = MarkerShape.circle,
-    this.strokeWidth = 2,
+    this.strokeWidth = 2.4,
   });
   final List<ChartPoint> points;
   final Color color;
@@ -43,9 +46,9 @@ class ChartXLabel {
   final bool bold;
 }
 
-/// One metric per chart (BP counts as one), green normal band with dashed
-/// edges, diamond markers for out-of-range points, tap a point for a
-/// white bordered tooltip. Breaks the line on missed days.
+/// Smooth monotone-curve clinical chart with translucent normal band,
+/// zero-overshoot splines, missed-day gaps, diamond out-of-range markers,
+/// and tap + finger-scrub tooltip inspection.
 class TrendChart extends StatefulWidget {
   const TrendChart({
     super.key,
@@ -59,7 +62,7 @@ class TrendChart extends StatefulWidget {
     required this.end,
     required this.xLabels,
     required this.semanticLabel,
-    this.height = 190,
+    this.height = 196,
     this.interactive = true,
   });
 
@@ -87,13 +90,15 @@ class _TrendChartState extends State<TrendChart> {
   @override
   void didUpdateWidget(covariant TrendChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.start != widget.start || oldWidget.end != widget.end || oldWidget.series.length != widget.series.length) {
+    if (oldWidget.start != widget.start ||
+        oldWidget.end != widget.end ||
+        oldWidget.series.length != widget.series.length) {
       _s = null;
       _p = null;
     }
   }
 
-  void _onTap(Offset pos, Size size) {
+  void _selectAt(Offset pos, Size size, {required bool toggleSame}) {
     final g = _Geo(size, widget);
     double best = double.infinity;
     int? bs;
@@ -104,21 +109,39 @@ class _TrendChartState extends State<TrendChart> {
         final dx = g.x(pts[p].t) - pos.dx;
         final dy = g.y(pts[p].v) - pos.dy;
         final d = dx * dx + dy * dy * 0.25;
-        if (dx.abs() < 26 && d < best) {
+        if (dx.abs() < 28 && d < best) {
           best = d;
           bs = s;
           bp = p;
         }
       }
     }
-    setState(() {
-      if (bs == _s && bp == _p) {
-        _s = null;
-        _p = null;
-      } else {
-        _s = bs;
-        _p = bp;
+
+    if (bs == null || bp == null) {
+      if (toggleSame && (_s != null || _p != null)) {
+        setState(() {
+          _s = null;
+          _p = null;
+        });
       }
+      return;
+    }
+
+    if (bs == _s && bp == _p) {
+      if (toggleSame) {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _s = null;
+          _p = null;
+        });
+      }
+      return;
+    }
+
+    HapticFeedback.selectionClick();
+    setState(() {
+      _s = bs;
+      _p = bp;
     });
   }
 
@@ -131,10 +154,20 @@ class _TrendChartState extends State<TrendChart> {
         final size = Size(constraints.maxWidth, widget.height);
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapDown: widget.interactive ? (d) => _onTap(d.localPosition, size) : null,
-          child: CustomPaint(
-            size: size,
-            painter: _ChartPainter(widget, _s, _p),
+          onTapDown: widget.interactive
+              ? (d) => _selectAt(d.localPosition, size, toggleSame: true)
+              : null,
+          onHorizontalDragStart: widget.interactive
+              ? (d) => _selectAt(d.localPosition, size, toggleSame: false)
+              : null,
+          onHorizontalDragUpdate: widget.interactive
+              ? (d) => _selectAt(d.localPosition, size, toggleSame: false)
+              : null,
+          child: RepaintBoundary(
+            child: CustomPaint(
+              size: size,
+              painter: _ChartPainter(widget, _s, _p),
+            ),
           ),
         );
       }),
@@ -143,7 +176,8 @@ class _TrendChartState extends State<TrendChart> {
 }
 
 class _Geo {
-  _Geo(Size size, this.w) : plot = Rect.fromLTRB(38, 12, size.width - 12, size.height - 28);
+  _Geo(Size size, this.w)
+      : plot = Rect.fromLTRB(40, 14, size.width - 12, size.height - 28);
 
   final TrendChart w;
   final Rect plot;
@@ -171,18 +205,30 @@ class _ChartPainter extends CustomPainter {
   final int? sel;
   final int? selP;
 
-  TextPainter _tp(String s, {double size = 12, Color color = C.text2, FontWeight weight = FontWeight.w400}) {
+  TextPainter _tp(
+    String s, {
+    double size = 11.5,
+    Color color = C.hint,
+    FontWeight weight = FontWeight.w500,
+  }) {
     return TextPainter(
       text: TextSpan(
         text: s,
-        style: TextStyle(fontFamily: T.f, fontSize: size, color: color, fontWeight: weight, height: 1.25, fontFeatures: T.tabular),
+        style: TextStyle(
+          fontFamily: T.f,
+          fontSize: size,
+          color: color,
+          fontWeight: weight,
+          height: 1.3,
+          fontFeatures: T.tabular,
+        ),
       ),
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.noScaling,
     )..layout();
   }
 
-  void _dashLine(Canvas c, Offset a, Offset b, Paint paint, {double on = 4, double off = 3}) {
+  void _dashLine(Canvas c, Offset a, Offset b, Paint paint, {double on = 5, double off = 4}) {
     final total = (b - a).distance;
     if (total <= 0) return;
     final dir = (b - a) / total;
@@ -207,41 +253,140 @@ class _ChartPainter extends CustomPainter {
     return out;
   }
 
+  /// Splits points into contiguous day runs (breaking on missed days > 1.5d).
+  List<List<Offset>> _segments(List<ChartPoint> pts, _Geo g) {
+    final runs = <List<Offset>>[];
+    List<Offset> cur = <Offset>[];
+    DateTime? prev;
+    for (final p in pts) {
+      final o = Offset(g.x(p.t), g.y(p.v));
+      final gap = prev == null
+          ? 0.0
+          : (DateTime(p.t.year, p.t.month, p.t.day)
+                      .difference(DateTime(prev.year, prev.month, prev.day))
+                      .inHours /
+                  24)
+              .abs();
+      if (prev != null && gap > 1.5) {
+        if (cur.isNotEmpty) runs.add(cur);
+        cur = <Offset>[o];
+      } else {
+        cur.add(o);
+      }
+      prev = p.t;
+    }
+    if (cur.isNotEmpty) runs.add(cur);
+    return runs;
+  }
+
+  /// Fritsch-Carlson monotone cubic spline: smooth curve with zero overshoot
+  /// past real clinical readings.
+  Path _monotonePath(List<Offset> pts) {
+    final path = Path();
+    if (pts.isEmpty) return path;
+    path.moveTo(pts.first.dx, pts.first.dy);
+    if (pts.length == 1) return path;
+    if (pts.length == 2) {
+      path.lineTo(pts[1].dx, pts[1].dy);
+      return path;
+    }
+
+    final n = pts.length;
+    final dx = List<double>.filled(n - 1, 0);
+    final m = List<double>.filled(n - 1, 0);
+    for (var i = 0; i < n - 1; i++) {
+      dx[i] = pts[i + 1].dx - pts[i].dx;
+      final dy = pts[i + 1].dy - pts[i].dy;
+      m[i] = dx[i].abs() > 0.001 ? dy / dx[i] : 0;
+    }
+
+    final t = List<double>.filled(n, 0);
+    t[0] = m[0];
+    t[n - 1] = m[n - 2];
+    for (var i = 1; i < n - 1; i++) {
+      if (m[i - 1] * m[i] <= 0) {
+        t[i] = 0;
+      } else {
+        t[i] = (m[i - 1] + m[i]) * 0.5;
+      }
+    }
+
+    for (var i = 0; i < n - 1; i++) {
+      if (m[i] == 0) {
+        t[i] = 0;
+        t[i + 1] = 0;
+      } else {
+        final a = t[i] / m[i];
+        final b = t[i + 1] / m[i];
+        final sq = a * a + b * b;
+        if (sq > 9) {
+          final tau = 3 / math.sqrt(sq);
+          t[i] = tau * a * m[i];
+          t[i + 1] = tau * b * m[i];
+        }
+      }
+    }
+
+    for (var i = 0; i < n - 1; i++) {
+      if (dx[i].abs() <= 0.001) {
+        path.lineTo(pts[i + 1].dx, pts[i + 1].dy);
+      } else {
+        final h = dx[i] / 3;
+        path.cubicTo(
+          pts[i].dx + h,
+          pts[i].dy + t[i] * h,
+          pts[i + 1].dx - h,
+          pts[i + 1].dy - t[i + 1] * h,
+          pts[i + 1].dx,
+          pts[i + 1].dy,
+        );
+      }
+    }
+    return path;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final g = _Geo(size, w);
     final plot = g.plot;
 
-    // Normal bands
-    final bandFill = Paint()..color = C.okBg;
+    // Translucent normal-range bands
+    final bandFill = Paint()..color = C.okBg.withValues(alpha: 0.75);
     final bandEdge = Paint()
-      ..color = C.okBorder
+      ..color = C.okBorder.withValues(alpha: 0.4)
       ..strokeWidth = 1;
     for (final b in w.bands) {
       final top = g.y(b.hi);
       final bot = g.y(b.lo);
-      canvas.drawRect(Rect.fromLTRB(plot.left, top, plot.right, bot), bandFill);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTRB(plot.left, top, plot.right, bot), const Radius.circular(4)),
+        bandFill,
+      );
       _dashLine(canvas, Offset(plot.left, top), Offset(plot.right, top), bandEdge);
       _dashLine(canvas, Offset(plot.left, bot), Offset(plot.right, bot), bandEdge);
     }
 
-    // Grid + Y labels
+    // Soft horizontal grid + Y labels
     final grid = Paint()
-      ..color = C.grid
+      ..color = C.divider
       ..strokeWidth = 1;
     for (var i = 0; i < w.yTicks.length; i++) {
       final y = g.y(w.yTicks[i]);
       canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), grid);
       if (i < w.yTickLabels.length) {
         final tp = _tp(w.yTickLabels[i]);
-        tp.paint(canvas, Offset(plot.left - 6 - tp.width, y - tp.height / 2));
+        tp.paint(canvas, Offset(plot.left - 8 - tp.width, y - tp.height / 2));
       }
     }
 
     // X labels
     for (var i = 0; i < w.xLabels.length; i++) {
       final xl = w.xLabels[i];
-      final tp = _tp(xl.text, color: xl.bold ? C.text : C.text2, weight: xl.bold ? FontWeight.w700 : FontWeight.w400);
+      final tp = _tp(
+        xl.text,
+        color: xl.bold ? C.text : C.hint,
+        weight: xl.bold ? FontWeight.w700 : FontWeight.w500,
+      );
       final x = g.x(xl.t);
       double dx = x - tp.width / 2;
       if (dx < plot.left - 10) dx = plot.left - 10;
@@ -249,36 +394,49 @@ class _ChartPainter extends CustomPainter {
       tp.paint(canvas, Offset(dx, plot.bottom + 8));
     }
 
-    // Series lines (break on missed days)
+    // Series curves + soft gradient wash under solid curves
     for (final s in w.series) {
-      final path = Path();
-      DateTime? prev;
-      for (final p in s.points) {
-        final o = Offset(g.x(p.t), g.y(p.v));
-        final gap = prev == null ? 99 : (DateTime(p.t.year, p.t.month, p.t.day).difference(DateTime(prev.year, prev.month, prev.day)).inHours / 24).abs();
-        if (prev == null || gap > 1.5) {
-          path.moveTo(o.dx, o.dy);
-        } else {
-          path.lineTo(o.dx, o.dy);
-        }
-        prev = p.t;
-      }
+      final runs = _segments(s.points, g);
       final stroke = Paint()
         ..color = s.color
         ..strokeWidth = s.strokeWidth
         ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(s.dashed ? _dashPath(path, 6, 4) : path, stroke);
+
+      for (final run in runs) {
+        if (run.length < 2) continue;
+        final curve = _monotonePath(run);
+
+        if (!s.dashed) {
+          final area = Path.from(curve)
+            ..lineTo(run.last.dx, plot.bottom)
+            ..lineTo(run.first.dx, plot.bottom)
+            ..close();
+          final fillPaint = Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                s.color.withValues(alpha: 0.14),
+                s.color.withValues(alpha: 0.0),
+              ],
+            ).createShader(plot);
+          canvas.drawPath(area, fillPaint);
+        }
+
+        canvas.drawPath(s.dashed ? _dashPath(curve, 6, 4) : curve, stroke);
+      }
     }
 
-    // Markers
+    // Data point markers (crisp white halo so points pop over bands/grid)
     final dense = w.series.isNotEmpty && w.series.first.points.length > 40;
-    final r = dense ? 2.6 : 3.6;
+    final r = dense ? 2.8 : 4.0;
     for (final s in w.series) {
       for (final p in s.points) {
         final o = Offset(g.x(p.t), g.y(p.v));
         if (p.flagged) {
-          final d = dense ? 4.0 : 5.5;
+          final d = dense ? 4.4 : 5.8;
           final path = Path()
             ..moveTo(o.dx, o.dy - d)
             ..lineTo(o.dx + d, o.dy)
@@ -291,73 +449,110 @@ class _ChartPainter extends CustomPainter {
             Paint()
               ..color = Colors.white
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 1,
+              ..strokeWidth = 1.5,
           );
         } else if (s.marker == MarkerShape.square) {
-          final rect = Rect.fromCenter(center: o, width: r * 1.8, height: r * 1.8);
-          canvas.drawRect(rect, Paint()..color = Colors.white);
-          canvas.drawRect(
+          final rect = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: o, width: r * 1.9, height: r * 1.9),
+            const Radius.circular(2),
+          );
+          canvas.drawRRect(rect, Paint()..color = Colors.white);
+          canvas.drawRRect(
             rect,
             Paint()
               ..color = s.color
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.6,
+              ..strokeWidth = 1.8,
           );
         } else {
+          canvas.drawCircle(o, r + 1.4, Paint()..color = Colors.white);
           canvas.drawCircle(o, r, Paint()..color = s.color);
         }
       }
     }
 
-    // Tooltip
-    if (sel != null && selP != null && sel! < w.series.length && selP! < w.series[sel!].points.length) {
-      final p = w.series[sel!].points[selP!];
+    // Floating tooltip on tap or finger scrub
+    if (sel != null &&
+        selP != null &&
+        sel! < w.series.length &&
+        selP! < w.series[sel!].points.length) {
+      final s = w.series[sel!];
+      final p = s.points[selP!];
       final o = Offset(g.x(p.t), g.y(p.v));
+      final accent = p.flagged ? C.errBorder : s.color;
+
       final guide = Paint()
-        ..color = C.text2
-        ..strokeWidth = 1;
-      _dashLine(canvas, Offset(o.dx, plot.top), Offset(o.dx, plot.bottom), guide, on: 3, off: 3);
+        ..color = C.borderStrong
+        ..strokeWidth = 1.25;
+      _dashLine(canvas, Offset(o.dx, plot.top), Offset(o.dx, plot.bottom), guide, on: 4, off: 3);
+
+      canvas.drawCircle(o, 10, Paint()..color = accent.withValues(alpha: 0.18));
+      canvas.drawCircle(o, 5.5, Paint()..color = Colors.white);
       canvas.drawCircle(
         o,
-        7,
+        5.5,
         Paint()
-          ..color = C.text
+          ..color = accent
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+          ..strokeWidth = 2.4,
       );
 
-      final t1 = _tp(p.line1, size: 12);
+      final t1 = _tp(p.line1, size: 11.5, color: C.text2, weight: FontWeight.w500);
       final t2 = _tp(p.line2, size: 14, color: C.text, weight: FontWeight.w700);
-      final bw = (t1.width > t2.width ? t1.width : t2.width) + 18;
-      final bh = t1.height + t2.height + 12;
+      final bw = (t1.width > t2.width ? t1.width : t2.width) + 22;
+      final bh = t1.height + t2.height + 16;
       double bx = o.dx > plot.center.dx ? o.dx - bw - 12 : o.dx + 12;
-      if (bx < 2) bx = 2;
-      if (bx + bw > size.width - 2) bx = size.width - 2 - bw;
-      double by = o.dy - bh - 6;
-      if (by < 2) by = o.dy + 10;
-      if (by + bh > size.height - 2) by = size.height - 2 - bh;
-      final box = RRect.fromRectAndRadius(Rect.fromLTWH(bx, by, bw, bh), const Radius.circular(3));
-      canvas.drawRRect(box.shift(const Offset(0, 2)), Paint()..color = const Color(0x22000000));
-      canvas.drawRRect(box, Paint()..color = Colors.white);
+      if (bx < 4) bx = 4;
+      if (bx + bw > size.width - 4) bx = size.width - 4 - bw;
+      double by = o.dy - bh - 10;
+      if (by < 4) by = o.dy + 12;
+      if (by + bh > size.height - 4) by = size.height - 4 - bh;
+
+      final box = RRect.fromRectAndRadius(
+        Rect.fromLTWH(bx, by, bw, bh),
+        const Radius.circular(10),
+      );
+      canvas.drawRRect(
+        box.shift(const Offset(0, 4)),
+        Paint()
+          ..color = const Color(0x1F0F172A)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+      canvas.drawRRect(box, Paint()..color = C.panel);
       canvas.drawRRect(
         box,
         Paint()
-          ..color = C.text2
+          ..color = C.borderStrong
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1,
       );
-      t1.paint(canvas, Offset(bx + 9, by + 6));
-      t2.paint(canvas, Offset(bx + 9, by + 6 + t1.height));
+      t1.paint(canvas, Offset(bx + 11, by + 8));
+      t2.paint(canvas, Offset(bx + 11, by + 8 + t1.height));
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ChartPainter old) => true;
+  bool shouldRepaint(covariant _ChartPainter old) =>
+      old.sel != sel ||
+      old.selP != selP ||
+      old.w.series != w.series ||
+      old.w.bands != w.bands ||
+      old.w.start != w.start ||
+      old.w.end != w.end ||
+      old.w.yMin != w.yMin ||
+      old.w.yMax != w.yMax;
 }
 
 /// Small legend swatches used under charts.
 class LegendLine extends StatelessWidget {
-  const LegendLine({super.key, required this.label, required this.color, this.dashed = false, this.square = false});
+  const LegendLine({
+    super.key,
+    required this.label,
+    required this.color,
+    this.dashed = false,
+    this.square = false,
+  });
+
   final String label;
   final Color color;
   final bool dashed;
@@ -368,7 +563,7 @@ class LegendLine extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CustomPaint(size: const Size(22, 10), painter: _LegendPainter(color, dashed, square)),
+        CustomPaint(size: const Size(22, 12), painter: _LegendPainter(color, dashed, square)),
         const SizedBox(width: 6),
         Text(label, style: T.cap),
       ],
@@ -386,7 +581,8 @@ class _LegendPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final p = Paint()
       ..color = color
-      ..strokeWidth = 2;
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
     final y = size.height / 2;
     if (dashed) {
       for (double x = 0; x < size.width; x += 8) {
@@ -397,22 +593,27 @@ class _LegendPainter extends CustomPainter {
     }
     final c = Offset(size.width / 2, y);
     if (square) {
-      final r = Rect.fromCenter(center: c, width: 7, height: 7);
-      canvas.drawRect(r, Paint()..color = Colors.white);
-      canvas.drawRect(
+      final r = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: c, width: 7.5, height: 7.5),
+        const Radius.circular(2),
+      );
+      canvas.drawRRect(r, Paint()..color = Colors.white);
+      canvas.drawRRect(
         r,
         Paint()
           ..color = color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6,
+          ..strokeWidth = 1.8,
       );
     } else {
-      canvas.drawCircle(c, 3.6, Paint()..color = color);
+      canvas.drawCircle(c, 4.4, Paint()..color = Colors.white);
+      canvas.drawCircle(c, 3.4, Paint()..color = color);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _LegendPainter old) => old.color != color || old.dashed != dashed || old.square != square;
+  bool shouldRepaint(covariant _LegendPainter old) =>
+      old.color != color || old.dashed != dashed || old.square != square;
 }
 
 class LegendDiamond extends StatelessWidget {
@@ -426,7 +627,14 @@ class LegendDiamond extends StatelessWidget {
       children: [
         Transform.rotate(
           angle: 0.785398,
-          child: Container(width: 9, height: 9, color: C.errBorder),
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: C.errBorder,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
         ),
         const SizedBox(width: 7),
         Text(label, style: T.cap),
@@ -446,8 +654,12 @@ class LegendBand extends StatelessWidget {
       children: [
         Container(
           width: 18,
-          height: 10,
-          decoration: BoxDecoration(color: C.okBg, border: Border.all(color: C.okBorder)),
+          height: 11,
+          decoration: BoxDecoration(
+            color: C.okBg,
+            border: Border.all(color: C.okBorder.withValues(alpha: 0.5)),
+            borderRadius: BorderRadius.circular(3),
+          ),
         ),
         const SizedBox(width: 6),
         Text(label, style: T.cap),

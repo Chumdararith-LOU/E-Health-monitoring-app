@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/tokens.dart';
 
@@ -9,8 +10,8 @@ class SegOption<V> {
   final IconData? icon;
 }
 
-/// Joined button group; the selected segment looks pushed in (navy).
-/// Used for ខ្មែរ | EN, report periods, device type, glucose unit.
+/// Modern sliding-thumb segmented control on a soft slate track.
+/// Used for report periods, device type, glucose unit, and settings toggles.
 class SegmentedToggle<V> extends StatelessWidget {
   const SegmentedToggle({
     super.key,
@@ -18,7 +19,7 @@ class SegmentedToggle<V> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.height = 46,
-    this.fontSize = 15,
+    this.fontSize = 14.5,
     this.semanticLabel,
   });
 
@@ -31,61 +32,139 @@ class SegmentedToggle<V> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final children = <Widget>[];
-    for (var i = 0; i < options.length; i++) {
-      final o = options[i];
-      final on = o.value == selected;
-      children.add(Expanded(
-        child: Semantics(
-          button: true,
-          selected: on,
-          label: o.label,
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onChanged == null ? null : () => onChanged!(o.value),
-            child: Container(
-              constraints: BoxConstraints(minHeight: height - 2),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                gradient: on ? null : D.grayGradient,
-                color: on ? C.navyBase : null,
-                border: i == 0 ? null : const Border(left: BorderSide(color: C.borderInput)),
-              ),
-              foregroundDecoration: on ? const BoxDecoration(gradient: D.insetShade) : null,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (o.icon != null) ...[
-                    Icon(o.icon, size: 19, color: on ? Colors.white : C.text),
-                    const SizedBox(width: 6),
-                  ],
-                  Flexible(
-                    child: Text(
-                      o.label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: T.button.copyWith(fontSize: fontSize, color: on ? Colors.white : C.text, fontFeatures: T.tabular),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ));
-    }
+    if (options.isEmpty) return const SizedBox.shrink();
+
+    final count = options.length;
+    final selectedIdx = options.indexWhere((o) => o.value == selected);
+    final alignX = count <= 1 || selectedIdx < 0
+        ? 0.0
+        : -1.0 + (2.0 * selectedIdx / (count - 1));
+
     return Semantics(
       label: semanticLabel,
       container: true,
       child: Container(
-        decoration: BoxDecoration(borderRadius: D.radius, border: Border.all(color: C.borderInput)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: IntrinsicHeight(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: C.inputUnit,
+          borderRadius: D.radius,
+          border: Border.all(color: C.border),
+        ),
+        child: Stack(
+          children: [
+            if (selectedIdx >= 0)
+              Positioned.fill(
+                child: AnimatedAlign(
+                  duration: D.animMed,
+                  curve: D.animCurve,
+                  alignment: Alignment(alignX, 0),
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / count,
+                    heightFactor: 1,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: C.panel,
+                        borderRadius: D.radiusSm,
+                        border: Border.all(color: C.border.withValues(alpha: 0.7)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x140F172A),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final o in options)
+                    Expanded(
+                      child: _SegmentItem(
+                        option: o,
+                        selected: o.value == selected,
+                        minHeight: (height - 8).clamp(36, 80).toDouble(),
+                        fontSize: fontSize,
+                        onTap: onChanged == null
+                            ? null
+                            : () {
+                                if (o.value != selected) {
+                                  HapticFeedback.selectionClick();
+                                }
+                                onChanged!(o.value);
+                              },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentItem<V> extends StatelessWidget {
+  const _SegmentItem({
+    required this.option,
+    required this.selected,
+    required this.minHeight,
+    required this.fontSize,
+    required this.onTap,
+  });
+
+  final SegOption<V> option;
+  final bool selected;
+  final double minHeight;
+  final double fontSize;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = selected ? C.navyBase : C.text2;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: option.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          constraints: BoxConstraints(minHeight: minHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (option.icon != null) ...[
+                Icon(option.icon, size: 18, color: fg),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: AnimatedDefaultTextStyle(
+                  duration: D.animFast,
+                  curve: D.animCurve,
+                  style: T.button.copyWith(
+                    fontSize: fontSize,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    color: fg,
+                    fontFeatures: T.tabular,
+                  ),
+                  child: Text(
+                    option.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
 import '../widgets/widgets.dart';
 import 'home/home_tab.dart';
 import 'links/links_tab.dart';
 import 'record/record_flow.dart';
 import 'reports/reports_tab.dart';
 
-/// Header + sync strip + current tab + bottom tab bar.
+/// Header + sync strip + state-preserving smooth tabs + bottom tab bar.
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key});
 
@@ -19,7 +20,9 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
 
-  void _go(int i) => setState(() => _index = i);
+  void _go(int i) {
+    if (_index != i) setState(() => _index = i);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +37,14 @@ class _ShellScreenState extends State<ShellScreen> {
         if (!didPop) _go(0);
       },
       child: Scaffold(
+        backgroundColor: C.canvas,
         body: Column(
           children: [
             AppHeader(title: titles[_index]),
             const SyncStrip(),
             if (kShowDevStrip) const DevStrip(),
             Expanded(
-              child: IndexedStack(
+              child: _SmoothIndexedStack(
                 index: _index,
                 children: [
                   HomeTab(onOpenReports: () => _go(1), onOpenLinks: () => _go(2)),
@@ -59,6 +63,45 @@ class _ShellScreenState extends State<ShellScreen> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Keeps all tabs mounted (preserving scroll offsets & loaded charts) while
+/// adding a crisp fade + subtle vertical settle on tab switch.
+class _SmoothIndexedStack extends StatelessWidget {
+  const _SmoothIndexedStack({required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (var i = 0; i < children.length; i++)
+          IgnorePointer(
+            ignoring: i != index,
+            child: ExcludeSemantics(
+              excluding: i != index,
+              child: TickerMode(
+                enabled: i == index,
+                child: AnimatedOpacity(
+                  opacity: i == index ? 1.0 : 0.0,
+                  duration: D.animFast,
+                  curve: D.animCurve,
+                  child: AnimatedSlide(
+                    offset: i == index ? Offset.zero : const Offset(0, 0.012),
+                    duration: D.animFast,
+                    curve: D.animCurve,
+                    child: children[i],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
