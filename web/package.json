@@ -1,0 +1,25 @@
+{
+  "name": "@ehealth/web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "E-Health Monitoring App — web portal for doctors and admins (hard-coded sample data, no backend yet).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ehealth/types": "workspace:*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8"
+  }
+}
