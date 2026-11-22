@@ -3,9 +3,12 @@
 // fields), one chart per metric, reading log with photo check.
 // Sidebar: patient summary, clinic PDF (print), clinical notes + post note.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { PatientSummary } from '@ehealth/types';
 import { useApp } from '../state/AppState';
-import { Crumbs, Header } from '../components/Header';
+import { Crumbs, Header, SHOW_DEV_STRIP } from '../components/Header';
+import { apiErrorText } from '../i18n/strings';
+import { ApiClientError, apiGetPatientSummary } from '../lib/api';
 import { Icon } from '../components/Icon';
 import { Alert, Badge, Empty, ErrorState, Loading, Pager, Panel, Segmented } from '../components/ui';
 import { LegendBand, LegendDiamond, LegendLine, TrendChart, type ChartPoint } from '../components/TrendChart';
@@ -18,7 +21,7 @@ type Period = '7' | '30' | '90' | 'custom';
 const LOG_PAGE = 10;
 
 export function PatientReport({ patientId }: { patientId: string }) {
-  const { t, f, lang, data, fields, simulate, setSimulate, addNote } = useApp();
+  const { t, f, lang, session, data, fields, simulate, setSimulate, addNote } = useApp();
   const [period, setPeriod] = useState<Period>('30');
   const today = dayStart(new Date());
   const [from, setFrom] = useState(f.iso(daysAgo(13, today)));
@@ -55,6 +58,43 @@ export function PatientReport({ patientId }: { patientId: string }) {
     if (!dayKeys.has(d.getTime())) missed++;
   }
   const flaggedDays = new Set(rs.filter((r) => readingFlags(fields, r).any).map((r) => dayStart(r.time).getTime())).size;
+
+  const [apiSummary, setApiSummary] = useState<PatientSummary | null>(null);
+  const [apiError, setApiError] = useState<ApiClientError | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+
+  const apiDays = Math.min(365, Math.max(1, totalDays));
+  const token = session?.token;
+  const hasPatient = Boolean(patient);
+
+  useEffect(() => {
+    if (!token || !hasPatient || simulate !== 'none') {
+      setApiSummary(null);
+      setApiError(null);
+      setApiLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setApiLoading(true);
+    setApiError(null);
+    apiGetPatientSummary(patientId, apiDays, token, ctrl.signal)
+      .then((res) => {
+        setApiSummary(res);
+        setApiLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setApiSummary(null);
+        setApiError(
+          err instanceof ApiClientError
+            ? err
+            : new ApiClientError(0, 'unknown', 'errors.internal_error'),
+        );
+        setApiLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [token, hasPatient, patientId, apiDays, simulate, retryTick]);
 
   if (!patient) {
     return (
@@ -100,16 +140,21 @@ export function PatientReport({ patientId }: { patientId: string }) {
   const offline = simulate === 'offline';
 
   let main;
-  if (simulate === 'revoked') {
+  if (simulate === 'revoked' || apiError?.status === 403) {
     main = (
       <Alert sev="info" icon="lock" action={<a className="btn btn-navy" href="#/doctor">{t.backToDash}</a>}>
         {t.accessRevoked}
       </Alert>
     );
-  } else if (simulate === 'loading') {
+  } else if (simulate === 'loading' || apiLoading) {
     main = <Loading />;
-  } else if (simulate === 'error') {
-    main = <ErrorState onRetry={() => setSimulate('none')} />;
+  } else if (simulate === 'error' || apiError) {
+    main = (
+      <ErrorState
+        message={apiError ? apiErrorText(lang, apiError.messageKey) : undefined}
+        onRetry={() => (apiError ? setRetryTick((n) => n + 1) : setSimulate('none'))}
+      />
+    );
   } else {
     main = (
       <div className="split">
@@ -146,6 +191,14 @@ export function PatientReport({ patientId }: { patientId: string }) {
               </span>
             )}
           </div>
+
+          {SHOW_DEV_STRIP && apiSummary && (
+            <Alert sev="info">
+              Live API <code>GET /patients/{apiSummary.patientId}/summary?days={apiDays}</code> →{' '}
+              {apiSummary.fields.length} fields · {apiSummary.missedDays} missed days · {apiSummary.outOfRangeCount} out of range
+              {apiSummary.fields.length === 0 ? ' (mock charts shown until readings module is wired)' : ''}
+            </Alert>
+          )}
 
           {rs.length === 0 ? (
             <Empty icon="info" title={t.noReadings} />

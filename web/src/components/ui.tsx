@@ -129,7 +129,7 @@ export function Empty({ icon = 'users', title, hint, action }: { icon?: string; 
 }
 
 /** State 5 — error with Retry. */
-export function ErrorState({ onRetry }: { onRetry: () => void }) {
+export function ErrorState({ onRetry, message }: { onRetry: () => void; message?: string }) {
   const { t } = useApp();
   return (
     <Alert
@@ -141,7 +141,7 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
         </button>
       }
     >
-      {t.loadError}
+      {message ?? t.loadError}
     </Alert>
   );
 }
