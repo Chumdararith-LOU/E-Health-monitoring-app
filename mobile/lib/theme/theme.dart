@@ -49,8 +49,8 @@ ThemeData buildTheme() {
 }
 
 /// Crisp, smooth page transition (200 ms fade + subtle lift — responsive on mid-range phones).
-Route<T> fastRoute<T>(Widget page) {
-  return PageRouteBuilder<T>(
+Route<R> fastRoute<R>(Widget page) {
+  return PageRouteBuilder<R>(
     transitionDuration: const Duration(milliseconds: 200),
     reverseTransitionDuration: const Duration(milliseconds: 160),
     pageBuilder: (context, animation, secondaryAnimation) => page,

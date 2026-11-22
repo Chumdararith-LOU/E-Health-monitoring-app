@@ -2,8 +2,6 @@
 // Drop-in replacement preserving all token names for full compatibility
 // across all screens and widgets, with Khmer-first line heights intact.
 
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/material.dart';
 
 /// Colours.

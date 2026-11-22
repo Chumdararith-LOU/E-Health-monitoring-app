@@ -44,15 +44,15 @@ class L {
     return b.toString();
   }
 
-  static String _2(int v) => v.toString().padLeft(2, '0');
+  static String _pad2(int v) => v.toString().padLeft(2, '0');
 
   String month(int m) => km ? _kmMonths[m - 1] : _enMonths[m - 1];
   String day(DateTime d) => n('${d.day} ${month(d.month)}');
   String dayY(DateTime d) => n('${d.day} ${month(d.month)} ${d.year}');
-  String time(DateTime d) => n('${_2(d.hour)}:${_2(d.minute)}');
+  String time(DateTime d) => n('${_pad2(d.hour)}:${_pad2(d.minute)}');
   String dayTime(DateTime d) => '${day(d)} · ${time(d)}';
-  String tod(TimeOfDay t) => n('${_2(t.hour)}:${_2(t.minute)}');
-  String numericDate(DateTime d) => n('${_2(d.day)}/${_2(d.month)}/${d.year}');
+  String tod(TimeOfDay t) => n('${_pad2(t.hour)}:${_pad2(t.minute)}');
+  String numericDate(DateTime d) => n('${_pad2(d.day)}/${_pad2(d.month)}/${d.year}');
   String dayRange(DateTime a, DateTime b) {
     if (a.month == b.month && a.year == b.year) return n('${a.day}–${b.day} ${month(b.month)}');
     return '${day(a)} – ${day(b)}';
