@@ -488,3 +488,34 @@ export function makeFormat(lang: 'km' | 'en', khmerDigits: boolean) {
 }
 
 export type Format = ReturnType<typeof makeFormat>;
+
+/** Translations for API error messageKeys (api/src/shared/errors.ts + network errors). */
+const API_ERRORS: Record<'km' | 'en', Record<string, string>> = {
+  km: {
+    'errors.bad_request': 'សំណើមិនត្រឹមត្រូវទេ។ សូមពិនិត្យព័ត៌មានម្តងទៀត។',
+    'errors.validation_failed': 'ទិន្នន័យដែលបានបញ្ចូលមិនត្រឹមត្រូវទេ។',
+    'errors.unauthorized': 'សម័យប្រើប្រាស់ផុតកំណត់ ឬមិនទាន់ចូលគណនី។ សូមចូលម្តងទៀត។',
+    'errors.forbidden': 'អ្នកមិនមានសិទ្ធិមើលទិន្នន័យនេះទេ។',
+    'errors.not_found': 'រកមិនឃើញទិន្នន័យដែលបានស្នើសុំទេ។',
+    'errors.conflict': 'ទិន្នន័យនេះមានរួចហើយ។',
+    'errors.db_unavailable': 'ប្រព័ន្ធទិន្នន័យមិនអាចភ្ជាប់បានជាបណ្តោះអាសន្ន។ សូមព្យាយាមម្តងទៀត។',
+    'errors.internal_error': 'មានបញ្ហាបច្ចេកទេសនៅម៉ាស៊ីនមេ។ សូមព្យាយាមម្តងទៀត។',
+    'errors.network': 'មិនអាចភ្ជាប់ទៅម៉ាស៊ីនមេបានទេ។ សូមពិនិត្យការតភ្ជាប់អ៊ីនធឺណិត។',
+  },
+  en: {
+    'errors.bad_request': 'Invalid request. Please check your input and try again.',
+    'errors.validation_failed': 'Some fields are invalid. Please check and try again.',
+    'errors.unauthorized': 'Session expired or not signed in. Please sign in again.',
+    'errors.forbidden': 'You do not have permission to view this data.',
+    'errors.not_found': 'The requested record was not found.',
+    'errors.conflict': 'This record already exists.',
+    'errors.db_unavailable': 'Database is temporarily unavailable. Please try again.',
+    'errors.internal_error': 'Something went wrong on the server. Please try again.',
+    'errors.network': 'Could not reach the server. Please check your connection.',
+  },
+};
+
+export function apiErrorText(lang: 'km' | 'en', messageKey: string): string {
+  return API_ERRORS[lang][messageKey] ?? API_ERRORS[lang]['errors.internal_error'];
+}
+
