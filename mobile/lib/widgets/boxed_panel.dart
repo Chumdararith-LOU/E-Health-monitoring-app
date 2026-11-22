@@ -4,7 +4,8 @@ import '../theme/tokens.dart';
 
 enum PanelAccent { normal, warn, ok, memo }
 
-/// White box, 1px border, optional shaded title bar. No floating text.
+/// Modern elevated surface card with hairline border, soft icon badge,
+/// and smooth accent transitions. Preserves the exact BoxedPanel API.
 class BoxedPanel extends StatelessWidget {
   const BoxedPanel({
     super.key,
@@ -13,7 +14,7 @@ class BoxedPanel extends StatelessWidget {
     this.trailing,
     required this.child,
     this.accent = PanelAccent.normal,
-    this.padding = const EdgeInsets.all(14),
+    this.padding = const EdgeInsets.all(16),
     this.footer,
   });
 
@@ -30,49 +31,66 @@ class BoxedPanel extends StatelessWidget {
     Color bg = C.panel;
     Color border = C.border;
     double borderWidth = 1;
-    Color headerBg = C.panelHeader;
-    Color headerDivider = C.border;
-    Color iconColor = C.text;
+    Color headerBg = Colors.transparent;
+    Color headerDivider = C.divider;
+    Color iconBg = C.navyTint;
+    Color iconColor = C.navyBase;
+    Color titleColor = C.text;
 
     switch (accent) {
       case PanelAccent.warn:
-        border = C.warnBorder;
-        borderWidth = 2;
+        bg = C.panel;
+        border = C.warnDivider;
+        borderWidth = 1.5;
         headerBg = C.warnBg;
         headerDivider = C.warnDivider;
+        iconBg = const Color(0xFFFEF3C7);
+        iconColor = C.warnText;
+        titleColor = C.warnText;
         break;
       case PanelAccent.ok:
-        border = C.okBorder;
-        borderWidth = 2;
+        bg = C.panel;
+        border = C.okDivider;
+        borderWidth = 1.5;
         headerBg = C.okBg;
         headerDivider = C.okDivider;
+        iconBg = const Color(0xFFDCFCE7);
+        iconColor = C.okText;
+        titleColor = C.okText;
         break;
       case PanelAccent.memo:
         bg = C.memoBg;
         border = C.memoBorder;
-        headerBg = C.memoHeader;
-        headerDivider = C.memoBorder;
+        borderWidth = 1;
+        headerBg = Colors.transparent;
+        headerDivider = C.warnDivider;
+        iconBg = C.memoHeader;
         iconColor = C.memoIcon;
+        titleColor = C.memoIcon;
         break;
       case PanelAccent.normal:
         break;
     }
 
-    return Container(
+    return AnimatedContainer(
+      duration: D.animMed,
+      curve: D.animCurve,
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: D.radius,
+        borderRadius: D.radiusLg,
         border: Border.all(color: border, width: borderWidth),
         boxShadow: D.panelShadow,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (title != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              AnimatedContainer(
+                duration: D.animMed,
+                curve: D.animCurve,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
                 decoration: BoxDecoration(
                   color: headerBg,
                   border: Border(bottom: BorderSide(color: headerDivider)),
@@ -80,20 +98,37 @@ class BoxedPanel extends StatelessWidget {
                 child: Row(
                   children: [
                     if (leadingIcon != null) ...[
-                      Icon(leadingIcon, size: 20, color: iconColor),
-                      const SizedBox(width: 8),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: iconBg,
+                          borderRadius: D.radiusSm,
+                        ),
+                        child: Icon(leadingIcon, size: 18, color: iconColor),
+                      ),
+                      const SizedBox(width: 10),
                     ],
                     Expanded(
-                      child: Semantics(header: true, child: Text(title!, style: T.h)),
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          title!,
+                          style: T.h.copyWith(color: titleColor),
+                        ),
+                      ),
                     ),
-                    if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+                    if (trailing != null) ...[
+                      const SizedBox(width: 8),
+                      trailing!,
+                    ],
                   ],
                 ),
               ),
             Padding(padding: padding, child: child),
             if (footer != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                 decoration: const BoxDecoration(
                   color: C.footer,
                   border: Border(top: BorderSide(color: C.divider)),

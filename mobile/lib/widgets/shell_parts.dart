@@ -1,14 +1,15 @@
-// Shared shell pieces (AppShellMobile): header, sync strip, tab bar.
-// They match the "Shared shell parts" row on the design canvas.
+// Shared shell pieces (AppShellMobile): light header, gliding language pill,
+// calm animated sync strip, and Material 3 bottom navigation bar.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
 
-/// 52px navy header: back button or emblem, title, ខ្មែរ | EN toggle.
-/// Extends under the status bar.
+/// Clean light top header with dark status-bar icons, crisp title, and
+/// gliding ខ្មែរ | EN pill switcher.
 class AppHeader extends StatelessWidget {
   const AppHeader({super.key, required this.title, this.showBack = false, this.onBack});
 
@@ -19,37 +20,46 @@ class AppHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: D.navyGradient,
-        border: Border(bottom: BorderSide(color: C.navyDark)),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 52),
-          padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
-          child: Row(
-            children: [
-              if (showBack)
-                _BackButton(label: l.back, onTap: onBack ?? () => Navigator.of(context).maybePop())
-              else
-                const _Emblem(),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: T.big.copyWith(color: Colors.white, height: 1.6),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: C.panel,
+          border: Border(bottom: BorderSide(color: C.divider)),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+            child: Row(
+              children: [
+                if (showBack)
+                  _BackButton(
+                    label: l.back,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      (onBack ?? () => Navigator.of(context).maybePop())();
+                    },
+                  )
+                else
+                  const _Emblem(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.big.copyWith(color: C.text),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              const LangToggle(),
-            ],
+                const SizedBox(width: 8),
+                const LangToggle(),
+              ],
+            ),
           ),
         ),
       ),
@@ -63,14 +73,13 @@ class _Emblem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 30,
-      height: 30,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
-        gradient: D.grayGradient,
-        border: Border.all(color: C.navyDark),
-        borderRadius: D.radius,
+        color: C.navyTint,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: const Icon(Icons.add, color: C.errBorder, size: 26),
+      child: const Icon(Icons.favorite_rounded, color: C.navyBase, size: 20),
     );
   }
 }
@@ -86,26 +95,20 @@ class _BackButton extends StatelessWidget {
       button: true,
       label: label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: _TapScale(
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 40),
-          padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
+          padding: const EdgeInsets.fromLTRB(6, 0, 12, 0),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF2E6BA3), Color(0xFF1F4E79)],
-            ),
-            border: Border.all(color: C.navyDark),
-            borderRadius: D.radius,
+            color: C.inputUnit,
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.chevron_left, color: Colors.white, size: 24),
-              Text(label, style: T.button.copyWith(fontSize: 14, color: Colors.white)),
+              const Icon(Icons.chevron_left_rounded, color: C.text, size: 22),
+              Text(label, style: T.label.copyWith(fontSize: 14, color: C.text)),
             ],
           ),
         ),
@@ -114,58 +117,90 @@ class _BackButton extends StatelessWidget {
   }
 }
 
-/// ខ្មែរ | EN segmented toggle (US-15). Lives in the header of every screen.
+/// Sliding-thumb ខ្មែរ | EN pill toggle (US-15).
 class LangToggle extends StatelessWidget {
   const LangToggle({super.key});
 
   @override
   Widget build(BuildContext context) {
     final st = AppScope.of(context);
-    Widget seg(String text, AppLang value, {bool first = false}) {
+    final isKm = st.lang == AppLang.km;
+
+    Widget seg(String text, AppLang value) {
       final on = st.lang == value;
-      return Semantics(
-        button: true,
-        selected: on,
-        label: value == AppLang.km ? 'ភាសាខ្មែរ' : 'English',
-        excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => st.setLang(value),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 38, minWidth: 46),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: on ? C.navyDark : null,
-              gradient: on ? null : D.grayGradient,
-              border: first ? null : const Border(left: BorderSide(color: C.navyDark)),
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: on,
+          label: value == AppLang.km ? 'ភាសាខ្មែរ' : 'English',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              if (!on) {
+                HapticFeedback.selectionClick();
+                st.setLang(value);
+              }
+            },
+            child: Center(
+              child: AnimatedDefaultTextStyle(
+                duration: D.animFast,
+                curve: D.animCurve,
+                style: T.button.copyWith(
+                  fontSize: 13.5,
+                  fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+                  color: on ? C.navyBase : C.text2,
+                ),
+                child: Text(text, maxLines: 1),
+              ),
             ),
-            foregroundDecoration: on ? const BoxDecoration(gradient: D.insetShade) : null,
-            child: Text(text, style: T.button.copyWith(fontSize: 14, color: on ? Colors.white : C.text)),
           ),
         ),
       );
     }
 
     return Container(
-      decoration: BoxDecoration(border: Border.all(color: C.navyDark), borderRadius: D.radius),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      width: 108,
+      height: 38,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: C.inputUnit,
+        borderRadius: D.radiusPill,
+        border: Border.all(color: C.border),
+      ),
+      child: Stack(
+        children: [
+          AnimatedAlign(
+            duration: D.animMed,
+            curve: D.animCurve,
+            alignment: isKm ? Alignment.centerLeft : Alignment.centerRight,
+            child: FractionallySizedBox(
+              widthFactor: 0.5,
+              heightFactor: 1,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: C.panel,
+                  borderRadius: D.radiusPill,
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x140F172A), blurRadius: 4, offset: Offset(0, 1)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Row(
             children: [
-              seg('ខ្មែរ', AppLang.km, first: true),
+              seg('ខ្មែរ', AppLang.km),
               seg('EN', AppLang.en),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-/// 28px status strip: synced / syncing / offline (NFR-09).
+/// Calm animated status strip: subtle when synced, clear amber when offline (NFR-09).
 class SyncStrip extends StatelessWidget {
   const SyncStrip({super.key});
 
@@ -177,27 +212,31 @@ class SyncStrip extends StatelessWidget {
     Color bg;
     Color border;
     Color fg;
+    Color dot;
     IconData icon;
     String text;
 
     if (st.offline) {
       bg = C.warnBg;
-      border = C.warnBorder;
+      border = C.warnDivider;
       fg = C.warnText;
-      icon = Icons.wifi_off;
+      dot = C.warnBorder;
+      icon = Icons.cloud_off_rounded;
       final c = st.pendingCount;
       text = c > 0 ? l.offlinePending(c) : l.offlineNone;
     } else if (st.syncing) {
       bg = C.infoBg;
-      border = C.infoBorder;
+      border = const Color(0xFFBAE6FD);
       fg = C.infoText;
-      icon = Icons.sync;
+      dot = C.infoBorder;
+      icon = Icons.sync_rounded;
       text = l.syncing;
     } else {
-      bg = C.okBg;
-      border = C.okBorder;
-      fg = C.okText;
-      icon = Icons.check;
+      bg = C.panelHeader;
+      border = C.divider;
+      fg = C.text2;
+      dot = C.okBorder;
+      icon = Icons.cloud_done_rounded;
       final t = st.lastSync;
       final sameDay = t.year == st.today.year && t.month == st.today.month && t.day == st.today.day;
       text = l.syncedAt(sameDay ? l.time(t) : l.dayTime(t));
@@ -205,14 +244,19 @@ class SyncStrip extends StatelessWidget {
 
     return Semantics(
       liveRegion: true,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 28),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        decoration: BoxDecoration(color: bg, border: Border(bottom: BorderSide(color: border))),
+      child: AnimatedContainer(
+        duration: D.animMed,
+        curve: D.animCurve,
+        constraints: const BoxConstraints(minHeight: 30),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(bottom: BorderSide(color: border)),
+        ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: fg),
-            const SizedBox(width: 7),
+            Icon(icon, size: 15, color: dot),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 text,
@@ -228,8 +272,8 @@ class SyncStrip extends StatelessWidget {
   }
 }
 
-/// Fixed bottom tab bar. Record is the green button (opens the record flow);
-/// Family members don't get it (US-13).
+/// Modern Material 3-inspired bottom tab bar with soft active pills and
+/// an inviting tactile emerald Record button (hidden for Family per US-13).
 class BottomTabBar extends StatelessWidget {
   const BottomTabBar({super.key, required this.index, required this.onTab, required this.onRecord});
 
@@ -243,7 +287,7 @@ class BottomTabBar extends StatelessWidget {
     final st = AppScope.of(context);
     final l = L.of(context);
 
-    Widget tab(int i, IconData icon, String label) {
+    Widget tab(int i, IconData activeIcon, IconData idleIcon, String label) {
       final on = i == index;
       return Expanded(
         child: Semantics(
@@ -251,24 +295,40 @@ class BottomTabBar extends StatelessWidget {
           selected: on,
           label: label,
           excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onTab(i),
-            child: Container(
-              decoration: BoxDecoration(
-                color: on ? C.navyTint : null,
-                border: Border(top: BorderSide(color: on ? C.navyBase : Colors.transparent, width: 3)),
-              ),
-              padding: const EdgeInsets.only(bottom: 2),
+          child: _TapScale(
+            onTap: () {
+              if (!on) HapticFeedback.selectionClick();
+              onTab(i);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 22, color: on ? C.navyBase : C.text2),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: T.tab.copyWith(color: on ? C.navyBase : C.text2, fontWeight: on ? FontWeight.w700 : FontWeight.w600),
+                  AnimatedContainer(
+                    duration: D.animMed,
+                    curve: D.animCurve,
+                    width: on ? 52 : 34,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: on ? C.navyTint : Colors.transparent,
+                      borderRadius: D.radiusPill,
+                    ),
+                    child: Icon(
+                      on ? activeIcon : idleIcon,
+                      size: 22,
+                      color: on ? C.navyBase : C.hint,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  AnimatedDefaultTextStyle(
+                    duration: D.animFast,
+                    curve: D.animCurve,
+                    style: T.tab.copyWith(
+                      color: on ? C.navyBase : C.text2,
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                 ],
               ),
@@ -283,21 +343,30 @@ class BottomTabBar extends StatelessWidget {
         button: true,
         label: l.tabRecord,
         excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onRecord,
+        child: _TapScale(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onRecord();
+          },
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
             decoration: BoxDecoration(
               gradient: D.greenGradient,
-              border: Border.all(color: C.saveBorder),
-              borderRadius: D.radius,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(color: Color(0x3815803D), blurRadius: 10, offset: Offset(0, 3)),
+              ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.add_circle_outline, size: 21, color: Colors.white),
-                Text(l.tabRecord, maxLines: 1, style: T.tab.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                const Icon(Icons.add_rounded, size: 22, color: Colors.white),
+                Text(
+                  l.tabRecord,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.tab.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+                ),
               ],
             ),
           ),
@@ -307,23 +376,54 @@ class BottomTabBar extends StatelessWidget {
 
     return Container(
       decoration: const BoxDecoration(
-        gradient: D.grayGradient,
-        border: Border(top: BorderSide(color: C.borderStrong)),
+        color: C.panel,
+        border: Border(top: BorderSide(color: C.divider)),
+        boxShadow: D.navShadow,
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 60,
+          height: 68,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              tab(0, Icons.home_outlined, l.tabHome),
+              tab(0, Icons.home_rounded, Icons.home_outlined, l.tabHome),
               if (st.canRecord) record,
-              tab(1, Icons.bar_chart, l.tabReports),
-              tab(2, Icons.link, l.tabLinks),
+              tab(1, Icons.bar_chart_rounded, Icons.bar_chart_outlined, l.tabReports),
+              tab(2, Icons.link_rounded, Icons.link_outlined, l.tabLinks),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Subtle tactile press-scale micro-interaction used on nav items and back button.
+class _TapScale extends StatefulWidget {
+  const _TapScale({required this.onTap, required this.child});
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_TapScale> createState() => _TapScaleState();
+}
+
+class _TapScaleState extends State<_TapScale> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
       ),
     );
   }

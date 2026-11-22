@@ -1,6 +1,6 @@
-// Design tokens — "2010s Clinical Utility".
-// Values come from claude/design-tokens-copy.md and the mobile design canvas.
-// Every screen uses these; never type a raw colour inside a screen file.
+// Design tokens — "Modern Clinical Utility" (Material 3 refined).
+// Drop-in replacement preserving all token names for full compatibility
+// across all screens and widgets, with Khmer-first line heights intact.
 
 import 'dart:ui' show FontFeature;
 
@@ -11,86 +11,86 @@ class C {
   C._();
 
   // Surfaces
-  static const canvas = Color(0xFFECEFF1);
+  static const canvas = Color(0xFFF5F7FA);
   static const panel = Color(0xFFFFFFFF);
-  static const panelHeader = Color(0xFFF4F6F8);
-  static const zebra = Color(0xFFF9FAFB);
-  static const footer = Color(0xFFFAFBFC);
-  static const inputUnit = Color(0xFFE8ECEF);
+  static const panelHeader = Color(0xFFF8FAFC);
+  static const zebra = Color(0xFFF8FAFC);
+  static const footer = Color(0xFFF8FAFC);
+  static const inputUnit = Color(0xFFF1F5F9);
 
   // Borders
-  static const border = Color(0xFFC5CCD3);
-  static const borderStrong = Color(0xFF8F9AA6);
-  static const borderInput = Color(0xFFB0B8C1);
-  static const divider = Color(0xFFE1E5EA);
-  static const grid = Color(0xFFD5DCE3);
+  static const border = Color(0xFFE2E8F0);
+  static const borderStrong = Color(0xFFCBD5E1);
+  static const borderInput = Color(0xFFCBD5E1);
+  static const divider = Color(0xFFEDF2F7);
+  static const grid = Color(0xFFE2E8F0);
 
   // Text
-  static const text = Color(0xFF1A202C);
-  static const text2 = Color(0xFF4A5568);
-  static const hint = Color(0xFF6B7684);
-  static const muted = Color(0xFF9AA5B1);
+  static const text = Color(0xFF0F172A);
+  static const text2 = Color(0xFF475569);
+  static const hint = Color(0xFF64748B);
+  static const muted = Color(0xFF94A3B8);
 
-  // Brand + actions
-  static const navyTop = Color(0xFF265C8F);
-  static const navyBase = Color(0xFF1B4369);
-  static const navyDark = Color(0xFF12304D);
-  static const navyTint = Color(0xFFDCE7F2);
-  static const saveTop = Color(0xFF348C39);
-  static const saveBase = Color(0xFF256B29);
-  static const saveBorder = Color(0xFF1E5622);
-  static const link = Color(0xFF0B5ED7);
-  static const focus = Color(0xFF1976D2);
-  static const focusHalo = Color(0x381976D2);
+  // Brand + actions (modern medical teal-navy & crisp emerald)
+  static const navyTop = Color(0xFF156D8F);
+  static const navyBase = Color(0xFF0F5C7A);
+  static const navyDark = Color(0xFF0B445C);
+  static const navyTint = Color(0xFFE0F2FE);
+  static const saveTop = Color(0xFF16A34A);
+  static const saveBase = Color(0xFF15803D);
+  static const saveBorder = Color(0xFF166534);
+  static const link = Color(0xFF0284C7);
+  static const focus = Color(0xFF0284C7);
+  static const focusHalo = Color(0x2E0284C7);
 
   // Clinical semantics (always paired with an icon + text)
-  static const okBg = Color(0xFFE8F5E9);
-  static const okBorder = Color(0xFF2E7D32);
-  static const okText = Color(0xFF1B5E20);
-  static const okDivider = Color(0xFFA5D6A7);
+  static const okBg = Color(0xFFECFDF5);
+  static const okBorder = Color(0xFF16A34A);
+  static const okText = Color(0xFF14532D);
+  static const okDivider = Color(0xFFBBF7D0);
 
-  static const warnBg = Color(0xFFFFF8E1);
+  static const warnBg = Color(0xFFFFFBEB);
   static const warnBorder = Color(0xFFD97706);
-  static const warnText = Color(0xFF8A4B00);
-  static const warnDivider = Color(0xFFE8C27A);
-  static const warnField = Color(0xFFFFFDF5);
+  static const warnText = Color(0xFF92400E);
+  static const warnDivider = Color(0xFFFDE68A);
+  static const warnField = Color(0xFFFFFDF7);
 
-  static const errBg = Color(0xFFFFEBEE);
-  static const errBorder = Color(0xFFC62828);
-  static const errText = Color(0xFF8E1B1B);
-  static const errField = Color(0xFFFFF5F6);
+  static const errBg = Color(0xFFFEF2F2);
+  static const errBorder = Color(0xFFDC2626);
+  static const errText = Color(0xFF991B1B);
+  static const errField = Color(0xFFFFF8F8);
 
-  static const infoBg = Color(0xFFE3F2FD);
-  static const infoBorder = Color(0xFF1565C0);
-  static const infoText = Color(0xFF0D47A1);
+  static const infoBg = Color(0xFFF0F9FF);
+  static const infoBorder = Color(0xFF0284C7);
+  static const infoText = Color(0xFF075985);
 
   // Doctor memo (US-19)
-  static const memoBg = Color(0xFFFFFDE7);
-  static const memoHeader = Color(0xFFFFF6C7);
-  static const memoBorder = Color(0xFFD8C36A);
-  static const memoIcon = Color(0xFF6B5A10);
+  static const memoBg = Color(0xFFFFFBEB);
+  static const memoHeader = Color(0xFFFEF3C7);
+  static const memoBorder = Color(0xFFFCD34D);
+  static const memoIcon = Color(0xFF92400E);
 
   // Camera
-  static const cameraDeck = Color(0xFF1F2429);
-  static const cameraBg = Color(0xFF2F343A);
+  static const cameraDeck = Color(0xFF111827);
+  static const cameraBg = Color(0xFF1F2937);
   static const lcd = Color(0xFFAEBB9E);
   static const lcdGlucose = Color(0xFFB8C7C9);
   static const lcdText = Color(0xFF1E2A1E);
-  static const frameGreen = Color(0xFF7CD67F);
-  static const deviceTop = Color(0xFFE4E7EA);
-  static const deviceBottom = Color(0xFFC9CED3);
-  static const deviceBorder = Color(0xFF9AA3AD);
-  static const onDark = Color(0xFFD5DCE3);
+  static const frameGreen = Color(0xFF4ADE80);
+  static const deviceTop = Color(0xFFE2E8F0);
+  static const deviceBottom = Color(0xFFCBD5E1);
+  static const deviceBorder = Color(0xFF94A3B8);
+  static const onDark = Color(0xFFE2E8F0);
 
-  // Overlays
-  static const scrim = Color(0x991A202C);
-  static const scrimLight = Color(0x591A202C);
-  static const shadow = Color(0x14000000);
-  static const shadowModal = Color(0x47000000);
+  // Overlays & soft elevation
+  static const scrim = Color(0x8A0F172A);
+  static const scrimLight = Color(0x470F172A);
+  static const shadow = Color(0x0D0F172A);
+  static const shadowModal = Color(0x330F172A);
 
   // Dev strip (non-production only)
-  static const devBg = Color(0xFFFFE082);
-  static const devBorder = Color(0xFFB8860B);
+  static const devBg = Color(0xFFFEF3C7);
+  static const devBorder = Color(0xFFD97706);
 }
 
 /// Spacing scale (4 px grid).
@@ -104,7 +104,7 @@ class Sp {
   static const double s6 = 32;
 }
 
-/// Typography. Khmer-first line heights (1.6–1.8) so stacked
+/// Typography. Khmer-first line heights (1.5–1.75) so stacked
 /// subscripts and upper vowels never clip.
 class T {
   T._();
@@ -113,36 +113,56 @@ class T {
   static const lcdFamily = 'ShareTechMono';
   static const tabular = <FontFeature>[FontFeature.tabularFigures()];
 
-  static const title = TextStyle(fontFamily: f, fontSize: 22, fontWeight: FontWeight.w700, height: 1.6, color: C.text);
-  static const h = TextStyle(fontFamily: f, fontSize: 16, fontWeight: FontWeight.w700, height: 1.65, color: C.text);
-  static const big = TextStyle(fontFamily: f, fontSize: 18, fontWeight: FontWeight.w700, height: 1.65, color: C.text);
-  static const hero = TextStyle(fontFamily: f, fontSize: 28, fontWeight: FontWeight.w700, height: 1.3, color: C.text, fontFeatures: tabular);
+  static const title = TextStyle(fontFamily: f, fontSize: 22, fontWeight: FontWeight.w700, height: 1.55, color: C.text);
+  static const h = TextStyle(fontFamily: f, fontSize: 16, fontWeight: FontWeight.w700, height: 1.6, color: C.text);
+  static const big = TextStyle(fontFamily: f, fontSize: 18, fontWeight: FontWeight.w700, height: 1.6, color: C.text);
+  static const hero = TextStyle(fontFamily: f, fontSize: 30, fontWeight: FontWeight.w700, height: 1.25, color: C.text, fontFeatures: tabular);
   static const value = TextStyle(fontFamily: f, fontSize: 26, fontWeight: FontWeight.w700, height: 1.3, color: C.text, fontFeatures: tabular);
   static const valueSm = TextStyle(fontFamily: f, fontSize: 20, fontWeight: FontWeight.w700, height: 1.35, color: C.text, fontFeatures: tabular);
   static const input = TextStyle(fontFamily: f, fontSize: 20, fontWeight: FontWeight.w600, height: 1.5, color: C.text, fontFeatures: tabular);
   static const body = TextStyle(fontFamily: f, fontSize: 16, fontWeight: FontWeight.w400, height: 1.75, color: C.text);
   static const bodyB = TextStyle(fontFamily: f, fontSize: 16, fontWeight: FontWeight.w700, height: 1.65, color: C.text);
-  static const bodySm = TextStyle(fontFamily: f, fontSize: 15, fontWeight: FontWeight.w400, height: 1.75, color: C.text);
-  static const label = TextStyle(fontFamily: f, fontSize: 16, fontWeight: FontWeight.w600, height: 1.65, color: C.text);
-  static const button = TextStyle(fontFamily: f, fontSize: 17, fontWeight: FontWeight.w700, height: 1.5);
-  static const cap = TextStyle(fontFamily: f, fontSize: 14, fontWeight: FontWeight.w400, height: 1.7, color: C.text2);
-  static const capSm = TextStyle(fontFamily: f, fontSize: 13, fontWeight: FontWeight.w400, height: 1.7, color: C.text2);
-  static const badge = TextStyle(fontFamily: f, fontSize: 13, fontWeight: FontWeight.w700, height: 1.65);
-  static const tab = TextStyle(fontFamily: f, fontSize: 13, height: 1.65);
+  static const bodySm = TextStyle(fontFamily: f, fontSize: 15, fontWeight: FontWeight.w400, height: 1.7, color: C.text);
+  static const label = TextStyle(fontFamily: f, fontSize: 15, fontWeight: FontWeight.w600, height: 1.65, color: C.text);
+  static const button = TextStyle(fontFamily: f, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5);
+  static const cap = TextStyle(fontFamily: f, fontSize: 14, fontWeight: FontWeight.w400, height: 1.65, color: C.text2);
+  static const capSm = TextStyle(fontFamily: f, fontSize: 13, fontWeight: FontWeight.w400, height: 1.65, color: C.text2);
+  static const badge = TextStyle(fontFamily: f, fontSize: 13, fontWeight: FontWeight.w600, height: 1.6);
+  static const tab = TextStyle(fontFamily: f, fontSize: 12.5, height: 1.6);
 }
 
-/// Shared box decorations.
+/// Shared box decorations, radii, and motion defaults.
 class D {
   D._();
 
-  static const radius = BorderRadius.all(Radius.circular(4));
-  static const panelShadow = [BoxShadow(color: C.shadow, blurRadius: 2, offset: Offset(0, 1))];
-  static const modalShadow = [BoxShadow(color: C.shadowModal, blurRadius: 20, offset: Offset(0, 6))];
+  // Radii — `radius` upgrades all existing controls to crisp 12px corners.
+  static const radius = BorderRadius.all(Radius.circular(12));
+  static const radiusSm = BorderRadius.all(Radius.circular(8));
+  static const radiusLg = BorderRadius.all(Radius.circular(16));
+  static const radiusPill = BorderRadius.all(Radius.circular(999));
 
+  // Motion defaults
+  static const animFast = Duration(milliseconds: 160);
+  static const animMed = Duration(milliseconds: 240);
+  static const animCurve = Curves.easeOutCubic;
+
+  // Soft diffused shadows
+  static const panelShadow = [
+    BoxShadow(color: C.shadow, blurRadius: 12, offset: Offset(0, 3)),
+    BoxShadow(color: Color(0x060F172A), blurRadius: 2, offset: Offset(0, 1)),
+  ];
+  static const navShadow = [
+    BoxShadow(color: Color(0x0F0F172A), blurRadius: 16, offset: Offset(0, -3)),
+  ];
+  static const modalShadow = [
+    BoxShadow(color: C.shadowModal, blurRadius: 28, offset: Offset(0, 10)),
+  ];
+
+  // Subtle modern gradients (keeps compatibility with existing buttons)
   static const grayGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFFFFFFFF), Color(0xFFE6EAEE)],
+    colors: [Color(0xFFFFFFFF), Color(0xFFF4F6F9)],
   );
   static const navyGradient = LinearGradient(
     begin: Alignment.topCenter,
@@ -155,11 +175,11 @@ class D {
     colors: [C.saveTop, C.saveBase],
   );
 
-  /// Dark-to-clear overlay that makes a control look "pushed in".
+  /// Soft pressed overlay (replaces harsh dark 2010 inset bevel).
   static const insetShade = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    stops: [0, 0.35],
-    colors: [Color(0x59000000), Color(0x00000000)],
+    stops: [0, 0.5],
+    colors: [Color(0x140F172A), Color(0x00000000)],
   );
 }
