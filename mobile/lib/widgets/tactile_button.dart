@@ -1,20 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/tokens.dart';
 
 enum BtnVariant { green, navy, gray, red, dangerOutline }
 
 class _BtnSpec {
-  const _BtnSpec({this.gradient, this.flat, required this.border, required this.fg, this.textShadow = false});
-  final Gradient? gradient;
-  final Color? flat;
+  const _BtnSpec({
+    required this.bg,
+    required this.border,
+    required this.fg,
+    this.shadow,
+    this.splash,
+  });
+
+  final Color bg;
   final Color border;
   final Color fg;
-  final bool textShadow;
+  final List<BoxShadow>? shadow;
+  final Color? splash;
 }
 
-/// The only button style in the app: 1px darker border, subtle vertical
-/// gradient, top highlight, and a visible 1px press-down.
+/// Modern tactile Material 3 button: clean high-contrast fills, subtle colored
+/// elevation, smooth press-scale feedback, ink ripple, and haptic confirmation.
 /// `loading` locks the button at once so a reading can't be saved twice.
 class TactileButton extends StatefulWidget {
   const TactileButton({
@@ -25,10 +33,10 @@ class TactileButton extends StatefulWidget {
     this.icon,
     this.trailingIcon,
     this.height = 56,
-    this.fontSize = 17,
+    this.fontSize = 16.5,
     this.loading = false,
     this.expand = true,
-    this.horizontalPadding = 14,
+    this.horizontalPadding = 16,
     this.borderOverride,
   });
 
@@ -54,84 +62,116 @@ class _TactileButtonState extends State<TactileButton> {
   _BtnSpec _spec(bool enabled) {
     if (!enabled) {
       if (widget.variant == BtnVariant.green) {
-        return const _BtnSpec(flat: Color(0xFFA5D6A7), border: Color(0xFF81C784), fg: Colors.white);
+        return const _BtnSpec(
+          bg: Color(0xFFBBF7D0),
+          border: Color(0xFF86EFAC),
+          fg: Color(0xFF166534),
+        );
       }
-      return const _BtnSpec(flat: Color(0xFFF1F3F5), border: Color(0xFFD8DEE4), fg: C.muted);
+      return const _BtnSpec(
+        bg: Color(0xFFF1F5F9),
+        border: Color(0xFFE2E8F0),
+        fg: C.muted,
+      );
     }
+
     switch (widget.variant) {
       case BtnVariant.green:
-        return _BtnSpec(
-          gradient: _down
-              ? const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1E5A22), Color(0xFF2E7D32)])
-              : D.greenGradient,
-          border: C.saveBorder,
+        return const _BtnSpec(
+          bg: C.saveBase,
+          border: C.saveBase,
           fg: Colors.white,
-          textShadow: true,
+          splash: Color(0x2EFFFFFF),
+          shadow: [
+            BoxShadow(color: Color(0x3315803D), blurRadius: 10, offset: Offset(0, 4)),
+          ],
         );
       case BtnVariant.navy:
-        return _BtnSpec(
-          gradient: _down
-              ? const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF143554), Color(0xFF1F4E79)])
-              : D.navyGradient,
-          border: C.navyDark,
+        return const _BtnSpec(
+          bg: C.navyBase,
+          border: C.navyBase,
           fg: Colors.white,
+          splash: Color(0x2EFFFFFF),
+          shadow: [
+            BoxShadow(color: Color(0x2E0F5C7A), blurRadius: 10, offset: Offset(0, 4)),
+          ],
         );
       case BtnVariant.red:
-        return _BtnSpec(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: _down ? const [Color(0xFF9A1515), Color(0xFFC62828)] : const [Color(0xFFD32F2F), Color(0xFFB71C1C)],
-          ),
-          border: const Color(0xFF8E1414),
+        return const _BtnSpec(
+          bg: C.errBorder,
+          border: C.errBorder,
           fg: Colors.white,
-          textShadow: true,
+          splash: Color(0x2EFFFFFF),
+          shadow: [
+            BoxShadow(color: Color(0x33DC2626), blurRadius: 10, offset: Offset(0, 4)),
+          ],
         );
       case BtnVariant.dangerOutline:
         return _BtnSpec(
-          gradient: _down ? null : D.grayGradient,
-          flat: _down ? const Color(0xFFF5D5D8) : null,
-          border: C.errBorder,
+          bg: C.errBg,
+          border: widget.borderOverride ?? const Color(0xFFFECACA),
           fg: C.errText,
+          splash: const Color(0x1ADC2626),
         );
       case BtnVariant.gray:
         return _BtnSpec(
-          gradient: _down ? null : D.grayGradient,
-          flat: _down ? const Color(0xFFD5DCE3) : null,
-          border: widget.borderOverride ?? C.borderInput,
+          bg: C.panel,
+          border: widget.borderOverride ?? C.borderStrong,
           fg: C.text,
+          splash: const Color(0x140F172A),
+          shadow: const [
+            BoxShadow(color: Color(0x0A0F172A), blurRadius: 6, offset: Offset(0, 2)),
+          ],
         );
     }
   }
 
-  void _set(bool v) {
-    if (_down != v) setState(() => _down = v);
+  void _setDown(bool v) {
+    if (_down != v && mounted) setState(() => _down = v);
+  }
+
+  void _handleTap() {
+    if (widget.variant == BtnVariant.green || widget.variant == BtnVariant.red) {
+      HapticFeedback.lightImpact();
+    } else {
+      HapticFeedback.selectionClick();
+    }
+    widget.onPressed?.call();
   }
 
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null && !widget.loading;
     final spec = _spec(enabled);
-    final style = T.button.copyWith(
-      fontSize: widget.fontSize,
-      color: spec.fg,
-      shadows: spec.textShadow ? const [Shadow(color: Color(0x59000000), offset: Offset(0, 1))] : null,
-    );
+    final style = T.button.copyWith(fontSize: widget.fontSize, color: spec.fg);
 
     final children = <Widget>[];
     if (widget.loading) {
-      children.add(SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: spec.fg)));
+      children.add(
+        SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: spec.fg),
+        ),
+      );
       children.add(const SizedBox(width: 10));
     } else if (widget.icon != null) {
-      children.add(Icon(widget.icon, size: 22, color: spec.fg));
+      children.add(Icon(widget.icon, size: 21, color: spec.fg));
       children.add(const SizedBox(width: 8));
     }
-    final text = Text(widget.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: style);
-    // Flexible only when the button has a bounded width to share.
+
+    final text = Text(
+      widget.label,
+      textAlign: TextAlign.center,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
     children.add(widget.expand ? Flexible(child: text) : text);
+
     if (widget.trailingIcon != null) {
       children.add(const SizedBox(width: 6));
-      children.add(Icon(widget.trailingIcon, size: 22, color: spec.fg));
+      children.add(Icon(widget.trailingIcon, size: 21, color: spec.fg));
     }
 
     return Semantics(
@@ -139,31 +179,39 @@ class _TactileButtonState extends State<TactileButton> {
       enabled: enabled,
       label: widget.label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => _set(true) : null,
-        onTapUp: enabled ? (_) => _set(false) : null,
-        onTapCancel: enabled ? () => _set(false) : null,
-        onTap: enabled ? widget.onPressed : null,
-        child: Container(
+      child: AnimatedScale(
+        scale: (_down && enabled) ? 0.975 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: D.animFast,
+          curve: D.animCurve,
           constraints: BoxConstraints(minHeight: widget.height),
           decoration: BoxDecoration(
-            gradient: spec.gradient,
-            color: spec.gradient == null ? spec.flat : null,
+            color: spec.bg,
             borderRadius: D.radius,
-            border: Border.all(color: spec.border),
+            border: Border.all(color: spec.border, width: 1.25),
+            boxShadow: (_down || !enabled) ? null : spec.shadow,
           ),
-          foregroundDecoration: _down && enabled ? const BoxDecoration(borderRadius: D.radius, gradient: D.insetShade) : null,
-          child: Stack(
-            children: [
-              if (enabled && !_down)
-                const Positioned(left: 1, right: 1, top: 0, child: SizedBox(height: 1, child: ColoredBox(color: Color(0x40FFFFFF)))),
-              Padding(
-                padding: EdgeInsets.fromLTRB(widget.horizontalPadding, _down ? 7 : 6, widget.horizontalPadding, _down ? 5 : 6),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: D.radius,
+              splashColor: spec.splash,
+              highlightColor: spec.splash,
+              onTapDown: enabled ? (_) => _setDown(true) : null,
+              onTapUp: enabled ? (_) => _setDown(false) : null,
+              onTapCancel: enabled ? () => _setDown(false) : null,
+              onTap: enabled ? _handleTap : null,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: widget.horizontalPadding,
+                  vertical: 8,
+                ),
                 child: SizedBox(
                   width: widget.expand ? double.infinity : null,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: widget.height - 14),
+                    constraints: BoxConstraints(minHeight: widget.height - 18),
                     child: Row(
                       mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -172,7 +220,7 @@ class _TactileButtonState extends State<TactileButton> {
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
