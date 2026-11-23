@@ -1,7 +1,7 @@
 // Shared typed API client for @ehealth/web (Owner: Rith).
 // Teammates can import `apiRequest` and `ApiClientError` to call their own endpoints.
 
-import type { ApiError, AuthUser, PatientSummary } from '@ehealth/types';
+import type { ApiError, AuthUser, PatientSeries, PatientSummary } from '@ehealth/types';
 
 const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000/api/v1';
 export const API_BASE = rawBase.replace(/\/+$/, '');
@@ -92,6 +92,20 @@ export function apiGetPatientSummary(
 ): Promise<PatientSummary> {
   const query = new URLSearchParams({ days: String(days) });
   return apiRequest<PatientSummary>(`/patients/${encodeURIComponent(patientId)}/summary?${query}`, {
+    token,
+    signal,
+  });
+}
+
+export function apiGetPatientSeries(
+  patientId: string,
+  field: string,
+  days: number,
+  token: string,
+  signal?: AbortSignal,
+): Promise<PatientSeries> {
+  const query = new URLSearchParams({ field, days: String(days) });
+  return apiRequest<PatientSeries>(`/patients/${encodeURIComponent(patientId)}/series?${query}`, {
     token,
     signal,
   });
