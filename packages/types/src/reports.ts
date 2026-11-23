@@ -27,3 +27,12 @@ export interface SeriesPoint {
   measuredAt: ISODateTime;
   value: number;
 }
+
+export interface PatientSeries {
+  patientId: string;
+  fieldKey: string;
+  from: ISODateTime;
+  to: ISODateTime;
+  points: SeriesPoint[];
+}
+
