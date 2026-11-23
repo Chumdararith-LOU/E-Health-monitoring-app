@@ -38,3 +38,53 @@ describe('GET /patients/:patientId/summary', () => {
     expect(res.body.error.code).toBe('validation_failed');
   });
 });
+
+const seriesUrl = (patientId: string, query = '') => `/api/v1/patients/${patientId}/series${query}`;
+
+describe('GET /patients/:patientId/series', () => {
+  it('401 without a token', async () => {
+    const res = await request(app).get(seriesUrl(own, '?field=systolic'));
+    expect(res.status).toBe(401);
+  });
+
+  it('200 for the patient themselves, days defaults to 7', async () => {
+    const res = await request(app)
+      .get(seriesUrl(own, '?field=systolic'))
+      .set('Authorization', await as('patient'));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ patientId: own, fieldKey: 'systolic', points: [] });
+    expect(res.body.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(res.body.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('403 when a patient asks for another patient', async () => {
+    const res = await request(app)
+      .get(seriesUrl(other, '?field=systolic'))
+      .set('Authorization', await as('patient'));
+    expect(res.status).toBe(403);
+  });
+
+  it('200 for an admin on any patient', async () => {
+    const res = await request(app)
+      .get(seriesUrl(other, '?field=glucose&days=30'))
+      .set('Authorization', await as('admin'));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ patientId: other, fieldKey: 'glucose', points: [] });
+  });
+
+  it('400 when field is missing', async () => {
+    const res = await request(app)
+      .get(seriesUrl(own))
+      .set('Authorization', await as('patient'));
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('validation_failed');
+  });
+
+  it('400 when days is out of range', async () => {
+    const res = await request(app)
+      .get(seriesUrl(own, '?field=systolic&days=0'))
+      .set('Authorization', await as('patient'));
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('validation_failed');
+  });
+});

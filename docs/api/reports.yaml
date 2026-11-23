@@ -46,6 +46,49 @@ summary:
       '403':
         $ref: './common.yaml#/responses/Forbidden'
 
+series:
+  get:
+    tags: [reports]
+    operationId: getPatientSeries
+    summary: Time-ordered points for one measure over the last N days (US-11)
+    parameters:
+      - name: patientId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: field
+        in: query
+        required: true
+        description: Measure key, e.g. systolic, diastolic, pulse, glucose, or an admin-defined field
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      - name: days
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 365, default: 7 }
+    responses:
+      '200':
+        description: Points sorted oldest first. `from` and `to` are calendar days in Asia/Phnom_Penh.
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/PatientSeries'
+            example:
+              patientId: '00000000-0000-4000-8000-000000000001'
+              fieldKey: systolic
+              from: '2026-11-18'
+              to: '2026-11-20'
+              points:
+                - measuredAt: '2026-11-18T00:10:00Z'
+                  value: 128
+                - measuredAt: '2026-11-19T00:05:00Z'
+                  value: 118
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+
 schemas:
   FieldSummary:
     type: object
@@ -77,3 +120,23 @@ schemas:
           $ref: '#/schemas/FieldSummary'
       missedDays: { type: integer, description: Days in the window with no reading }
       outOfRangeCount: { type: integer, description: Readings with at least one value outside its normal range }
+  SeriesPoint:
+    type: object
+    required: [measuredAt, value]
+    properties:
+      measuredAt: { type: string, format: date-time }
+      value: { type: number }
+  PatientSeries:
+    type: object
+    required: [patientId, fieldKey, from, to, points]
+    properties:
+      patientId: { type: string, format: uuid }
+      fieldKey:
+        type: string
+        description: e.g. systolic, diastolic, pulse, glucose, or an admin-defined field
+      from: { type: string, format: date }
+      to: { type: string, format: date }
+      points:
+        type: array
+        items:
+          $ref: '#/schemas/SeriesPoint'

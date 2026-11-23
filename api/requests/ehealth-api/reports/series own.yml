@@ -1,0 +1,23 @@
+info:
+  name: series own
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{baseUrl}}/patients/{{patientId}}/series?field=systolic&days=30"
+  params:
+    - name: field
+      value: "systolic"
+      type: query
+    - name: days
+      value: "30"
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

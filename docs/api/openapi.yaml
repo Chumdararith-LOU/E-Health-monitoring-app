@@ -22,6 +22,8 @@ paths:
   # reports – Rith
   /patients/{patientId}/summary:
     $ref: './reports.yaml#/summary'
+  /patients/{patientId}/series:
+    $ref: './reports.yaml#/series'
 
   # accounts – Phayuk: add one line per path here, pointing to ./accounts.yaml
   # readings – Seyla: add one line per path here, pointing to ./readings.yaml
