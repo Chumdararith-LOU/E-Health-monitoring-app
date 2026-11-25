@@ -2,10 +2,11 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { makeSeed, SEED_VERSION } from '../data/seed';
 import { CustomField, DataState, DoctorNote, Reading, Role, Settings, User } from '../data/types';
 import { I18n, makeI18n } from '../i18n';
+import { apiDevLogin } from '../lib/api';
 
 /**
- * Browser-only store (no backend). It plays the role the REST API will play later:
- * every read goes through canView(), so the screens already behave as with the real server (NFR-03).
+ * Browser-only store with optional live API token (from /dev/login when the API is running).
+ * Every read goes through canView(), so the screens already behave as with the real server (NFR-03).
  */
 const STORAGE_KEY = 'ehealth-web-demo-v1';
 
@@ -13,12 +14,14 @@ interface State {
   data: DataState;
   settings: Settings;
   userId: string | null;
+  token: string | null;
 }
 
 const DEFAULT_SETTINGS: Settings = { lang: 'km', numerals: 'western', textScale: 1 };
 
 type Action =
   | { type: 'signIn'; userId: string }
+  | { type: 'setToken'; userId: string; token: string | null }
   | { type: 'signOut' }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'upsertReading'; reading: Reading }
@@ -34,9 +37,11 @@ function reducer(s: State, a: Action): State {
   const d = s.data;
   switch (a.type) {
     case 'signIn':
-      return { ...s, userId: a.userId };
+      return { ...s, userId: a.userId, token: null };
+    case 'setToken':
+      return s.userId === a.userId ? { ...s, token: a.token } : s;
     case 'signOut':
-      return { ...s, userId: null };
+      return { ...s, userId: null, token: null };
     case 'settings':
       return { ...s, settings: { ...s.settings, ...a.patch } };
     case 'upsertReading':
@@ -66,14 +71,19 @@ function load(): State {
     if (raw) {
       const saved = JSON.parse(raw);
       if (saved.data?.version === SEED_VERSION) {
-        return { data: saved.data, settings: { ...DEFAULT_SETTINGS, ...saved.settings }, userId: saved.userId ?? null };
+        return {
+          data: saved.data,
+          settings: { ...DEFAULT_SETTINGS, ...saved.settings },
+          userId: saved.userId ?? null,
+          token: typeof saved.token === 'string' ? saved.token : null,
+        };
       }
-      return { data: makeSeed(), settings: { ...DEFAULT_SETTINGS, ...saved.settings }, userId: null };
+      return { data: makeSeed(), settings: { ...DEFAULT_SETTINGS, ...saved.settings }, userId: null, token: null };
     }
   } catch {
     /* storage blocked or corrupted → start from demo data */
   }
-  return { data: makeSeed(), settings: DEFAULT_SETTINGS, userId: null };
+  return { data: makeSeed(), settings: DEFAULT_SETTINGS, userId: null, token: null };
 }
 
 export const newId = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -82,6 +92,7 @@ interface Ctx {
   state: State;
   i18n: I18n;
   user: User | null;
+  token: string | null;
   /** patients this user may see: linked (doctor) or all (admin, support only) */
   patients: User[];
   userById: (id: string) => User | undefined;
@@ -135,16 +146,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [state.data.readings, canView],
   );
 
+  const signIn = useCallback(
+    (id: string) => {
+      dispatch({ type: 'signIn', userId: id });
+      const target = state.data.users.find((u) => u.id === id);
+      if (target && (target.role === 'doctor' || target.role === 'admin')) {
+        void apiDevLogin(target.role)
+          .then(({ token }) => {
+            dispatch({ type: 'setToken', userId: id, token });
+          })
+          .catch(() => {
+            // API not running — standalone demo mode continues without a token.
+          });
+      }
+    },
+    [state.data.users],
+  );
+
   const value: Ctx = {
     state,
     i18n,
     user,
+    token: state.token,
     patients,
     userById,
     canView,
     readingsOf,
     dispatch,
-    signIn: (id) => dispatch({ type: 'signIn', userId: id }),
+    signIn,
     signOut: () => dispatch({ type: 'signOut' }),
     setSettings: (patch) => dispatch({ type: 'settings', patch }),
   };
