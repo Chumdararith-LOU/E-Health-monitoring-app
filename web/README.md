@@ -79,10 +79,13 @@ Tabs, period and filters are kept in the URL (`?tab=readings&p=90`), so Back, Re
 
 Use `apiRequest<T>()` from `src/lib/api.ts` for all API calls. It handles `VITE_API_URL` (default `http://localhost:3000/api/v1`), attaches `Authorization: Bearer <token>` when `token` is passed, supports `AbortSignal`, and throws `ApiClientError` with the backend's `messageKey`.
 
-Already in `src/lib/api.ts`, not yet used by the pages:
+Already wired in the app (falls back to local demo data when the API server is not running):
 
-- `apiDevLogin(role)` → `POST /api/v1/dev/login`
-- `apiGetPatientSummary(patientId, days, token, signal)` → `GET /api/v1/patients/:patientId/summary`
+- `apiDevLogin(role)` → `POST /api/v1/dev/login` (called by `AppStore.signIn` to obtain a dev JWT)
+- `apiGetPatientSummary(patientId, days, token, signal)` → `GET /api/v1/patients/:patientId/summary` (called by `PatientPage`)
+
+Ready in `src/lib/api.ts` for when live series data is wired:
+
 - `apiGetPatientSeries(patientId, field, days, token, signal)` → `GET /api/v1/patients/:patientId/series`
 
 Actions in `src/store/AppStore.tsx` to replace as modules land:
