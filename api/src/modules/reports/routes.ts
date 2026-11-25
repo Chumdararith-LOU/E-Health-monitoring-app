@@ -1,12 +1,19 @@
-import { Router } from 'express';
+import { type Request, Router } from 'express';
 import { z } from 'zod';
 import { requirePatientAccess } from '../../shared/access';
 import { requireAuth } from '../../shared/auth';
+import { type Db, getDb } from '../../shared/db';
 import { validate } from '../../shared/validate';
+import { listReadings } from '../readings';
 import { computeSeries } from './series';
 import { computeSummary } from './summary';
 
 export const reportsRouter = Router();
+
+function dbOf(req: Request): Db {
+  const getter = req.app.locals.getDb as (() => Db) | undefined;
+  return (getter ?? getDb)();
+}
 
 reportsRouter.get('/reports/ping', (_req, res) => {
   res.json({ module: 'reports', ok: true });
@@ -23,7 +30,9 @@ reportsRouter.get(
   validate({ query: summaryQuery }),
   (req, res) => {
     const { days } = req.query as unknown as z.infer<typeof summaryQuery>;
-    res.json(computeSummary({ patientId: req.params.patientId as string, days, readings: [] }));
+    const patientId = req.params.patientId as string;
+    const readings = listReadings(dbOf(req), patientId);
+    res.json(computeSummary({ patientId, days, readings }));
   },
 );
 
@@ -39,12 +48,14 @@ reportsRouter.get(
   validate({ query: seriesQuery }),
   (req, res) => {
     const { field, days } = req.query as unknown as z.infer<typeof seriesQuery>;
+    const patientId = req.params.patientId as string;
+    const readings = listReadings(dbOf(req), patientId);
     res.json(
       computeSeries({
-        patientId: req.params.patientId as string,
+        patientId,
         fieldKey: field,
         days,
-        readings: [],
+        readings,
       }),
     );
   },
