@@ -22,6 +22,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -53,3 +54,16 @@ flutter:
     - family: MaterialDesignIcons
       fonts:
         - asset: assets/fonts/MaterialDesignIcons.ttf
+
+# App icon from the design (run: dart run flutter_launcher_icons)
+flutter_launcher_icons:
+  image_path: assets/icon/icon.png
+  android: true
+  adaptive_icon_background: assets/icon/android-icon-background.png
+  adaptive_icon_foreground: assets/icon/android-icon-foreground.png
+  adaptive_icon_monochrome: assets/icon/android-icon-monochrome.png
+  # the design already has the safe-zone padding built in
+  adaptive_icon_foreground_inset: 0
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#0B5CAB"
