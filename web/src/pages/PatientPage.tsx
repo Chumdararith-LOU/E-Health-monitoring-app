@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PatientSummary } from '@ehealth/types';
+import type { PatientSeries, PatientSummary } from '@ehealth/types';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { addDays, dayKey, startOfDay } from '../data/dates';
 import { isOutOfRange, MEASURE_ORDER, MEASURES, readingLevel } from '../data/ranges';
 import { customRange, daysWithReadings, inRange, lastNDays, Range, statOf } from '../data/stats';
 import { Reading } from '../data/types';
-import { ApiClientError, apiGetPatientSummary } from '../lib/api';
+import { ApiClientError } from '../lib/api';
+import { fetchPatientReport, hasLiveSeriesData, pickChartPoints } from '../lib/reports';
 import { newId, useApp } from '../store/AppStore';
 import { ChartSeries, LineChart } from '../ui/Charts';
 import { Modal, useFeedback } from '../ui/Feedback';
@@ -51,8 +52,14 @@ export function PatientPage() {
   const asc = useMemo(() => inPeriod.slice().reverse(), [inPeriod]);
 
   const allowed = Boolean(p && canView(id));
+  const fields = useMemo(
+    () => state.data.fields.filter((f) => f.active || inPeriod.some((r) => r.extra?.[f.id] != null)),
+    [state.data.fields, inPeriod],
+  );
+  const seriesKeysKey = [...MEASURE_ORDER, ...fields.map((f) => f.id)].join(',');
   const apiDays = Math.min(365, Math.max(1, range.days));
   const [apiSummary, setApiSummary] = useState<PatientSummary | null>(null);
+  const [apiSeries, setApiSeries] = useState<Record<string, PatientSeries> | null>(null);
   const [apiError, setApiError] = useState<ApiClientError | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
@@ -60,21 +67,25 @@ export function PatientPage() {
   useEffect(() => {
     if (!token || !allowed) {
       setApiSummary(null);
+      setApiSeries(null);
       setApiError(null);
       setApiLoading(false);
       return;
     }
     const ctrl = new AbortController();
+    const keys = seriesKeysKey ? seriesKeysKey.split(',') : [];
     setApiLoading(true);
     setApiError(null);
-    apiGetPatientSummary(id, apiDays, token, ctrl.signal)
-      .then((res) => {
-        setApiSummary(res);
+    fetchPatientReport(id, keys, apiDays, token, ctrl.signal)
+      .then(({ summary, series }) => {
+        setApiSummary(summary);
+        setApiSeries(series);
         setApiLoading(false);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setApiSummary(null);
+        setApiSeries(null);
         setApiError(
           err instanceof ApiClientError
             ? err
@@ -83,7 +94,7 @@ export function PatientPage() {
         setApiLoading(false);
       });
     return () => ctrl.abort();
-  }, [token, allowed, id, apiDays, retryTick]);
+  }, [token, allowed, id, apiDays, seriesKeysKey, retryTick]);
 
   if (!p || !canView(id)) {
     return (
@@ -102,29 +113,32 @@ export function PatientPage() {
     setPage(0);
   };
 
-  const fields = state.data.fields.filter((f) => f.active || inPeriod.some((r) => r.extra?.[f.id] != null));
   const team = state.data.links.filter((l) => l.patientId === p.id && l.status === 'active').map((l) => ({ l, u: userById(l.userId) }));
   const notes = state.data.notes.filter((n) => n.patientId === p.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const isDoctor = user?.role === 'doctor';
   const from = range.from.getTime();
   const to = Math.min(range.to.getTime(), Date.now());
   const pts = (get: (r: Reading) => number | undefined) => asc.filter((r) => get(r) != null).map((r) => ({ t: new Date(r.takenAt).getTime(), v: get(r)!, id: r.id }));
-  const openById = (rid: string) => setOpen(all.find((r) => r.id === rid) ?? null);
+  const seriesPts = (fieldKey: string, get: (r: Reading) => number | undefined) =>
+    pickChartPoints(apiSeries, fieldKey, pts(get));
+  const openById = (rid: string) => setOpen(all.find((r) => r.id === rid || r.takenAt === rid) ?? null);
 
   const charts: { key: string; title: string; unit: string; decimals?: number; series: ChartSeries[] }[] = [
     {
       key: 'bp', title: t('bp'), unit: 'mmHg',
       series: [
-        { key: 'sys', label: t('m_systolic'), color: 'var(--series-1)', points: pts((r) => r.systolic), band: { min: MEASURES.systolic.normalMin, max: MEASURES.systolic.normalMax } },
-        { key: 'dia', label: t('m_diastolic'), color: 'var(--series-2)', points: pts((r) => r.diastolic), band: { min: MEASURES.diastolic.normalMin, max: MEASURES.diastolic.normalMax } },
+        { key: 'sys', label: t('m_systolic'), color: 'var(--series-1)', points: seriesPts('systolic', (r) => r.systolic), band: { min: MEASURES.systolic.normalMin, max: MEASURES.systolic.normalMax } },
+        { key: 'dia', label: t('m_diastolic'), color: 'var(--series-2)', points: seriesPts('diastolic', (r) => r.diastolic), band: { min: MEASURES.diastolic.normalMin, max: MEASURES.diastolic.normalMax } },
       ],
     },
-    { key: 'glu', title: t('m_glucose'), unit: 'mg/dL', series: [{ key: 'glu', label: t('m_glucose'), color: 'var(--series-1)', points: pts((r) => r.glucose), band: { min: MEASURES.glucose.normalMin, max: MEASURES.glucose.normalMax } }] },
-    { key: 'pul', title: t('m_pulse'), unit: 'bpm', series: [{ key: 'pul', label: t('m_pulse'), color: 'var(--series-1)', points: pts((r) => r.pulse), band: { min: MEASURES.pulse.normalMin, max: MEASURES.pulse.normalMax } }] },
-    ...fields.filter((f) => inPeriod.some((r) => r.extra?.[f.id] != null)).map((f) => ({
-      key: f.id, title: `${i18n.name(f)}${f.active ? '' : ' ' + t('archivedSuffix')}`, unit: f.unit, decimals: f.decimals,
-      series: [{ key: f.id, label: i18n.name(f), color: 'var(--series-1)', points: pts((r) => r.extra?.[f.id]) }],
-    })),
+    { key: 'glu', title: t('m_glucose'), unit: 'mg/dL', series: [{ key: 'glu', label: t('m_glucose'), color: 'var(--series-1)', points: seriesPts('glucose', (r) => r.glucose), band: { min: MEASURES.glucose.normalMin, max: MEASURES.glucose.normalMax } }] },
+    { key: 'pul', title: t('m_pulse'), unit: 'bpm', series: [{ key: 'pul', label: t('m_pulse'), color: 'var(--series-1)', points: seriesPts('pulse', (r) => r.pulse), band: { min: MEASURES.pulse.normalMin, max: MEASURES.pulse.normalMax } }] },
+    ...fields
+      .filter((f) => (apiSeries?.[f.id]?.points.length ?? 0) > 0 || inPeriod.some((r) => r.extra?.[f.id] != null))
+      .map((f) => ({
+        key: f.id, title: `${i18n.name(f)}${f.active ? '' : ' ' + t('archivedSuffix')}`, unit: f.unit, decimals: f.decimals,
+        series: [{ key: f.id, label: i18n.name(f), color: 'var(--series-1)', points: seriesPts(f.id, (r) => r.extra?.[f.id]) }],
+      })),
   ];
 
   const liveFields =
@@ -290,7 +304,7 @@ export function PatientPage() {
                   missed: apiSummary.missedDays,
                   outOfRange: apiSummary.outOfRangeCount,
                 })}
-                {apiSummary.fields.length === 0 ? ` ${t('liveApiDemoFallback')}` : ''}
+                {apiSummary.fields.length === 0 && !hasLiveSeriesData(apiSeries) ? ` ${t('liveApiDemoFallback')}` : ''}
               </Banner>
             </div>
           ) : null}
