@@ -3,7 +3,7 @@
 ## Context
 
 - Project: "E-Health Monitoring App", a final-year project for a team of 4.
-- Stack: TypeScript everywhere, pnpm workspaces monorepo:
+- Stack: pnpm workspaces monorepo (TypeScript for API, web, and shared types; Flutter/Dart for mobile):
   - `api/` (Node.js + Express)
   - `web/` (React + Vite)
   - `mobile/` (Flutter / Dart – not part of the pnpm workspace; managed with `flutter pub`)
@@ -25,12 +25,17 @@
   requests (squash merge).
 - After each step: run the relevant checks, then make ONE git commit with a short, informal,
   lowercase message (e.g. "add api skeleton"). Do not push unless asked.
-- Each module stays in its own folders: `api/src/modules/<module>`, `web/src/modules/<module>`,
-  `mobile/src/modules/<module>`. It has its own DB schema file and its own language files
-  `locales/km/<module>.json` and `locales/en/<module>.json`.
-- Never edit another module's files. Shared code lives in `api/src/shared`, `web/src/shared`,
-  `mobile/src/shared` and `packages/types`.
-- All user-facing text goes through i18n keys, never hard-coded strings. Khmer is the default.
+- Each module stays in its own area:
+  - API: `api/src/modules/<module>` (with its own DB `schema.ts`).
+  - Web: each member works on their assigned pages in `web/src/pages/` (see `web/README.md`).
+  - Mobile: each member works on their assigned screens in `mobile/lib/screens/` (see `mobile/README.md`).
+- Never edit another module's files. Shared/platform code (owned by Rith) lives in:
+  - `api/src/shared/`, `packages/types/`
+  - `web/src/components/`, `web/src/lib/`, `web/src/state/`, `web/src/i18n/strings.ts`
+  - `mobile/lib/widgets/`, `mobile/lib/state/`, `mobile/lib/theme/`, `mobile/lib/l10n/strings.dart`
+- All user-facing text goes through i18n/l10n keys, never hard-coded strings. Khmer (`km`) is the
+  default. Currently web text lives in `web/src/i18n/strings.ts` and mobile text in
+  `mobile/lib/l10n/strings.dart` (to be split per module in US-15 to avoid merge conflicts).
 - A module may import another module ONLY from its `index.ts` (its public API), never its
   internal files.
 - A module never writes to another module's tables.
