@@ -424,6 +424,7 @@ class _TapScaleState extends State<_TapScale> {
         scale: _down ? 0.94 : 1.0,
         duration: const Duration(milliseconds: 110),
         curve: Curves.easeOutCubic,
+        child: widget.child,
       ),
     );
   }
