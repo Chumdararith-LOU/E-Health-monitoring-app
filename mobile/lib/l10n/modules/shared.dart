@@ -87,6 +87,11 @@ const Map<String, String> sharedKm = {
   'resetDone': 'បានកំណត់ទិន្នន័យសាកល្បងឡើងវិញ',
   'version': 'កំណែ',
   'signedInAs': 'បានចូលជា',
+
+  // live API status
+  'liveApiLoading': 'កំពុងផ្ទុកសង្ខេបពីម៉ាស៊ីនមេ…',
+  'liveApiConnected': 'បានភ្ជាប់ម៉ាស៊ីនមេផ្ទាល់ ({fields} ប្រអប់ · ខកខាន {missed} ថ្ងៃ · ក្រៅកម្រិត {outOfRange})',
+  'liveApiDemoFallback': 'បង្ហាញក្រាហ្វសាកល្បង រហូតដល់ម៉ូឌុលលទ្ធផលត្រូវបានភ្ជាប់។',
 };
 
 const Map<String, String> sharedEn = {
@@ -175,4 +180,9 @@ const Map<String, String> sharedEn = {
   'resetDone': 'Demo data reset',
   'version': 'Version',
   'signedInAs': 'Signed in as',
+
+  // live API status
+  'liveApiLoading': 'Loading live summary…',
+  'liveApiConnected': 'Live API connected ({fields} fields · {missed} missed days · {outOfRange} out of range)',
+  'liveApiDemoFallback': 'Showing demo charts until the readings module is connected.',
 };

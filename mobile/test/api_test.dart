@@ -1,0 +1,214 @@
+import 'dart:convert';
+
+import 'package:ehealth_mobile/api/api_client.dart';
+import 'package:ehealth_mobile/api/api_models.dart';
+import 'package:ehealth_mobile/api/reports_repository.dart';
+import 'package:ehealth_mobile/data/stats.dart';
+import 'package:ehealth_mobile/data/types.dart';
+import 'package:ehealth_mobile/l10n/strings.dart';
+import 'package:ehealth_mobile/state/app_state.dart';
+import 'package:ehealth_mobile/widgets/charts.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('ApiClient.devLogin sends role and parses JWT + user', () async {
+    late String seenMethod;
+    late Uri seenUri;
+    late String? seenBody;
+
+    final api = ApiClient(
+      baseUrl: 'http://example.test/api/v1/',
+      transport: (method, uri, headers, body) async {
+        seenMethod = method;
+        seenUri = uri;
+        seenBody = body;
+        return ApiHttpResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'token': 'jwt-123',
+            'user': {'id': 'u-doc', 'role': 'doctor', 'name': 'Dr. Keo'},
+          }),
+        );
+      },
+    );
+
+    final res = await api.devLogin(Role.doctor);
+    expect(seenMethod, 'POST');
+    expect(seenUri.toString(), 'http://example.test/api/v1/dev/login');
+    expect(jsonDecode(seenBody!), {'role': 'doctor'});
+    expect(res.token, 'jwt-123');
+    expect(res.user.role, Role.doctor);
+  });
+
+  test('ApiClient.getPatientReport fetches summary and unique series with Bearer token', () async {
+    final calls = <Uri>[];
+    final authHeaders = <String?>[];
+
+    final api = ApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      transport: (method, uri, headers, body) async {
+        calls.add(uri);
+        authHeaders.add(headers['Authorization']);
+        if (uri.path.endsWith('/summary')) {
+          return ApiHttpResponse(
+            statusCode: 200,
+            body: jsonEncode({
+              'patientId': 'p1',
+              'from': '2026-11-01',
+              'to': '2026-11-25',
+              'fields': [
+                {'fieldKey': 'systolic', 'min': 118, 'max': 134, 'avg': 126, 'count': 10},
+              ],
+              'missedDays': 2,
+              'outOfRangeCount': 1,
+            }),
+          );
+        }
+        final field = uri.queryParameters['field'] ?? 'unknown';
+        return ApiHttpResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'patientId': 'p1',
+            'fieldKey': field,
+            'from': '2026-11-01',
+            'to': '2026-11-25',
+            'points': [
+              {'measuredAt': '2026-11-24T06:30:00.000Z', 'value': 128},
+            ],
+          }),
+        );
+      },
+    );
+
+    final report = await api.getPatientReport(
+      'p1',
+      fieldKeys: const ['systolic', 'diastolic', 'systolic'],
+      days: 30,
+      token: 'tok-abc',
+    );
+
+    expect(calls.length, 3); // 1 summary + 2 unique series
+    expect(authHeaders.every((h) => h == 'Bearer tok-abc'), isTrue);
+    expect(report.summary.missedDays, 2);
+    expect(report.summary.fields.single.avg, 126);
+    expect(report.series.keys.toSet(), {'systolic', 'diastolic'});
+    expect(report.series['systolic']!.points.single.value, 128);
+  });
+
+  test('ApiClient maps backend ApiError and network failures into ApiClientException', () async {
+    final forbiddenApi = ApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      transport: (_, __, ___, ____) async => ApiHttpResponse(
+        statusCode: 403,
+        body: jsonEncode({
+          'error': {'code': 'forbidden', 'messageKey': 'errors.forbidden'},
+        }),
+      ),
+    );
+
+    await expectLater(
+      forbiddenApi.getPatientSummary('p2', days: 7, token: 't'),
+      throwsA(
+        isA<ApiClientException>()
+            .having((e) => e.status, 'status', 403)
+            .having((e) => e.messageKey, 'messageKey', 'errors.forbidden'),
+      ),
+    );
+
+    final offlineApi = ApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      transport: (_, __, ___, ____) async => throw Exception('socket closed'),
+    );
+
+    await expectLater(
+      offlineApi.devLogin(Role.patient),
+      throwsA(
+        isA<ApiClientException>()
+            .having((e) => e.status, 'status', 0)
+            .having((e) => e.messageKey, 'messageKey', 'errors.network'),
+      ),
+    );
+  });
+
+  test('seriesToChartPoints sorts ascending and aligns systolic/diastolic IDs by timestamp', () {
+    final t1 = DateTime.parse('2026-11-20T06:15:00.000Z');
+    final t2 = DateTime.parse('2026-11-22T06:30:00.000Z');
+    final sys = seriesToChartPoints(PatientSeriesDto(
+      patientId: 'p1',
+      fieldKey: 'systolic',
+      from: '2026-11-01',
+      to: '2026-11-25',
+      points: [SeriesPointDto(measuredAt: t2, value: 132), SeriesPointDto(measuredAt: t1, value: 124)],
+    ));
+    final dia = seriesToChartPoints(PatientSeriesDto(
+      patientId: 'p1',
+      fieldKey: 'diastolic',
+      from: '2026-11-01',
+      to: '2026-11-25',
+      points: [SeriesPointDto(measuredAt: t1, value: 80)],
+    ));
+
+    expect(sys.map((p) => p.v).toList(), [124, 132]);
+    expect(sys.first.id, dia.first.id);
+    expect(sys.first.t, dia.first.t);
+  });
+
+  test('pickChartPoints and pickFieldStat prefer live data and fall back when empty', () {
+    final demoPt = [ChartPoint(DateTime(2026, 11, 20), 120, 'demo-1')];
+    const demoStat = Stat(min: 110, max: 130, avg: 120, count: 5);
+
+    expect(pickChartPoints(null, 'systolic', demoPt), same(demoPt));
+    expect(pickFieldStat(null, 'systolic', demoStat), same(demoStat));
+    expect(hasLiveSeriesData(null), isFalse);
+
+    final liveSeries = {
+      'systolic': PatientSeriesDto(
+        patientId: 'p1',
+        fieldKey: 'systolic',
+        from: '2026-11-01',
+        to: '2026-11-25',
+        points: [SeriesPointDto(measuredAt: DateTime.parse('2026-11-25T06:30:00.000Z'), value: 136)],
+      ),
+    };
+    final liveSummary = const PatientSummaryDto(
+      patientId: 'p1',
+      from: '2026-11-01',
+      to: '2026-11-25',
+      fields: [FieldSummaryDto(fieldKey: 'systolic', min: 120, max: 136, avg: 128, count: 2)],
+      missedDays: 5,
+      outOfRangeCount: 1,
+    );
+
+    expect(hasLiveSeriesData(liveSeries), isTrue);
+    expect(pickChartPoints(liveSeries, 'systolic', demoPt).single.v, 136);
+    expect(pickFieldStat(liveSummary, 'systolic', demoStat).avg, 128);
+  });
+
+  test('AppState.signIn fetches dev token asynchronously and signOut clears it', () async {
+    final api = ApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      transport: (_, __, ___, ____) async => ApiHttpResponse(
+        statusCode: 200,
+        body: jsonEncode({
+          'token': 'dev-jwt-patient',
+          'user': {'id': 'u-1', 'role': 'patient', 'name': 'Sok Dara'},
+        }),
+      ),
+    );
+    final st = AppState(persist: false, api: api);
+    st.signIn('p1');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(st.token, 'dev-jwt-patient');
+    st.signOut();
+    expect(st.token, isNull);
+  });
+
+  test('API error translations have identical Khmer and English keys', () {
+    expect(apiErrorsKm.keys.toSet(), apiErrorsEn.keys.toSet());
+    final kmI18n = I18n(Lang.km, Numerals.western);
+    final enI18n = I18n(Lang.en, Numerals.western);
+    expect(kmI18n.apiError('errors.forbidden'), apiErrorsKm['errors.forbidden']);
+    expect(enI18n.apiError('errors.unknown_xyz'), apiErrorsEn['errors.internal_error']);
+  });
+}

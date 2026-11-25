@@ -28,6 +28,21 @@ flutter devices        # your phone should be listed
 flutter run            # debug build, hot reload with "r"
 ```
 
+### Connecting to the local API
+
+The app works standalone with demo data when the API is not running. When the API server (`pnpm --filter @ehealth/api dev`) is running on port `3000`:
+
+- **iOS Simulator / macOS:** uses `http://localhost:3000/api/v1` automatically.
+- **Android Emulator:** uses `http://10.0.2.2:3000/api/v1` automatically (`10.0.2.2` maps to the host computer's `localhost`).
+- **Physical phone on the same Wi-Fi:** pass your computer's LAN IP:
+  ```bash
+  flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3000/api/v1
+  ```
+
+Already wired (falls back cleanly to demo data while the `readings` module returns empty data):
+- `ApiClient.devLogin(role)` → `POST /api/v1/dev/login` (called in `AppState.signIn`)
+- `ReportsRepository.fetchPatientReport(...)` → `GET /api/v1/patients/:patientId/summary` & `GET /api/v1/patients/:patientId/series` (called in `ReportsScreen`)
+
 Before you push, run `flutter analyze` and `flutter test`; both should pass with no issues.
 
 ### Samsung Galaxy S22+, S22 Ultra, S20 Ultra (Android)
@@ -92,7 +107,8 @@ lib/
   data/ranges.dart                 safe input limits (FR-06) + normal ranges for flags
   data/stats.dart                  min / max / average, missed days, doctor summary (FR-10, FR-12)
   data/seed.dart                   ← the demo data. Replace with API calls.
-  state/app_state.dart             local store that plays the API's role: canView / canRecord / canEditReading
+  api/                             shared HTTP client (`api_client.dart`), DTOs (`api_models.dart`), reports repository (`reports_repository.dart`)
+  state/app_state.dart             local store + dev JWT token; plays the API's role until every module lands
   widgets/                         the shared UI kit: AppText, AppButton, AppCard, AppField, Segmented,
                                    StatusBadge, LineChart, PatientSwitcher, sheets, dialog + toast
   screens/shell.dart               header, role-based bottom tabs, push() / goToTab()

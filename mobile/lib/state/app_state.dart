@@ -10,6 +10,8 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/api_client.dart';
+import '../api/reports_repository.dart';
 import '../data/dates.dart';
 import '../data/seed.dart';
 import '../data/types.dart';
@@ -26,13 +28,27 @@ String newId(String prefix) =>
     '$prefix-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}-${_rand.nextInt(1 << 30).toRadixString(36)}';
 
 class AppState extends ChangeNotifier {
-  AppState({bool persist = true}) : _persist = persist;
+  AppState({
+    bool persist = true,
+    bool enableLiveApi = true,
+    ApiClient? api,
+    ReportsRepository? reportsRepo,
+  })  : _persist = persist,
+        _enableLiveApi = enableLiveApi,
+        api = api ?? ApiClient() {
+    this.reportsRepo = reportsRepo ?? ApiReportsRepository(this.api);
+  }
 
   final bool _persist;
+  final bool _enableLiveApi;
+  final ApiClient api;
+  late final ReportsRepository reportsRepo;
+
   bool ready = false;
   DataState data = makeSeed();
   Settings settings = const Settings();
   String? userId;
+  String? token;
   String? selectedPatientId;
 
   /// Current bottom tab (not saved).
@@ -40,6 +56,7 @@ class AppState extends ChangeNotifier {
 
   Timer? _saveTimer;
   I18n? _i18n;
+  bool _disposed = false;
 
   // ---------- load & save ----------
 
@@ -55,6 +72,7 @@ class AppState extends ChangeNotifier {
           if (dataOk) {
             data = DataState.fromJson(savedData!);
             userId = saved['userId'] as String?;
+            token = saved['token'] as String?;
             selectedPatientId = saved['selectedPatientId'] as String?;
           }
           settings = Settings.fromJson(saved['settings'] as Map<String, dynamic>? ?? {});
@@ -80,6 +98,7 @@ class AppState extends ChangeNotifier {
             'data': data.toJson(),
             'settings': settings.toJson(),
             'userId': userId,
+            'token': token,
             'selectedPatientId': selectedPatientId,
           }),
         );
@@ -91,6 +110,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _saveTimer?.cancel();
     super.dispose();
   }
@@ -181,13 +201,30 @@ class AppState extends ChangeNotifier {
 
   void signIn(String id) {
     userId = id;
+    token = null;
     selectedPatientId = null;
     tab = AppTab.home;
     _changed();
+    final target = userById(id);
+    if (_enableLiveApi && target != null) {
+      unawaited(_fetchDevToken(id, target.role));
+    }
+  }
+
+  Future<void> _fetchDevToken(String id, Role role) async {
+    try {
+      final res = await api.devLogin(role);
+      if (_disposed || userId != id) return;
+      token = res.token;
+      _changed();
+    } catch (_) {
+      // API not running — standalone demo mode continues without a token.
+    }
   }
 
   void signOut() {
     userId = null;
+    token = null;
     selectedPatientId = null;
     _changed();
   }
