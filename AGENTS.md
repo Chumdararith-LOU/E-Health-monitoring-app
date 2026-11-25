@@ -34,8 +34,10 @@
   - `web/src/ui/`, `web/src/lib/`, `web/src/store/`, `web/src/i18n/`
   - `mobile/lib/widgets/`, `mobile/lib/state/`, `mobile/lib/theme/`, `mobile/lib/l10n/`
 - All user-facing text goes through i18n/l10n keys, never hard-coded strings. Khmer (`km`) is the
-  default. Currently web text lives in `web/src/i18n/km.ts` & `en.ts` and mobile text in
-  `mobile/lib/l10n/km.dart` & `en.dart` (to be split per module in US-15 to avoid merge conflicts).
+  default. Strings are split per module to avoid merge conflicts:
+  - Web: `web/src/i18n/modules/<module>.ts` (`shared`, `accounts`, `readings`, `ocr`, `reports`), merged by `km.ts` & `en.ts`.
+  - Mobile: `mobile/lib/l10n/modules/<module>.dart` (`shared`, `accounts`, `readings`, `ocr`, `reports`), merged by `km.dart` & `en.dart`.
+  - Edit only your own module's file; Rith owns `shared` and the merged barrels.
 - A module may import another module ONLY from its `index.ts` (its public API), never its
   internal files.
 - A module never writes to another module's tables.
