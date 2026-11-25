@@ -1,5 +1,5 @@
 name: ehealth_mobile
-description: "E-Health Monitoring App — mobile UI build with hard-coded sample data (no backend yet)."
+description: "E-Health Monitoring App — mobile front-end with demo data stored on the phone (no backend yet)."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -14,6 +14,9 @@ dependencies:
   # date and time pickers.
   flutter_localizations:
     sdk: flutter
+  image_picker: ^1.2.4
+  share_plus: ^13.3.1
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -23,15 +26,30 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  assets:
+    - assets/images/
+
   fonts:
+    - family: GoogleSans
+      fonts:
+        - asset: assets/fonts/GoogleSans_400Regular.ttf
+          weight: 400
+        - asset: assets/fonts/GoogleSans_500Medium.ttf
+          weight: 500
+        - asset: assets/fonts/GoogleSans_600SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/GoogleSans_700Bold.ttf
+          weight: 700
     - family: NotoSansKhmer
       fonts:
-        - asset: assets/fonts/NotoSansKhmer-Regular.ttf
+        - asset: assets/fonts/NotoSansKhmer_400Regular.ttf
           weight: 400
-        - asset: assets/fonts/NotoSansKhmer-SemiBold.ttf
+        - asset: assets/fonts/NotoSansKhmer_500Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansKhmer_600SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/NotoSansKhmer-Bold.ttf
+        - asset: assets/fonts/NotoSansKhmer_700Bold.ttf
           weight: 700
-    - family: ShareTechMono
+    - family: MaterialDesignIcons
       fonts:
-        - asset: assets/fonts/ShareTechMono-Regular.ttf
+        - asset: assets/fonts/MaterialDesignIcons.ttf
