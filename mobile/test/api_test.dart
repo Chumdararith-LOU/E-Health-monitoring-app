@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'package:ehealth_mobile/api/api_client.dart';
 import 'package:ehealth_mobile/api/api_models.dart';
 import 'package:ehealth_mobile/api/reports_repository.dart';
+import 'package:ehealth_mobile/app.dart';
 import 'package:ehealth_mobile/data/stats.dart';
 import 'package:ehealth_mobile/data/types.dart';
 import 'package:ehealth_mobile/l10n/strings.dart';
 import 'package:ehealth_mobile/state/app_state.dart';
 import 'package:ehealth_mobile/widgets/charts.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -210,5 +212,105 @@ void main() {
     final enI18n = I18n(Lang.en, Numerals.western);
     expect(kmI18n.apiError('errors.forbidden'), apiErrorsKm['errors.forbidden']);
     expect(enI18n.apiError('errors.unknown_xyz'), apiErrorsEn['errors.internal_error']);
+  });
+
+  test('ApiClient sends from/to query params when custom range is provided', () async {
+    final uris = <Uri>[];
+    final api = ApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      transport: (_, uri, __, ___) async {
+        uris.add(uri);
+        if (uri.path.endsWith('/summary')) {
+          return ApiHttpResponse(
+            statusCode: 200,
+            body: jsonEncode({
+              'patientId': 'p1',
+              'from': '2026-11-10',
+              'to': '2026-11-20',
+              'fields': [],
+              'missedDays': 11,
+              'outOfRangeCount': 0,
+            }),
+          );
+        }
+        return ApiHttpResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'patientId': 'p1',
+            'fieldKey': 'systolic',
+            'from': '2026-11-10',
+            'to': '2026-11-20',
+            'points': [],
+          }),
+        );
+      },
+    );
+
+    await api.getPatientReport(
+      'p1',
+      fieldKeys: const ['systolic'],
+      days: 11,
+      token: 'tok',
+      from: '2026-11-10',
+      to: '2026-11-20',
+    );
+
+    expect(uris[0].queryParameters, {'from': '2026-11-10', 'to': '2026-11-20'});
+    expect(uris[1].queryParameters, {'field': 'systolic', 'from': '2026-11-10', 'to': '2026-11-20'});
+  });
+
+  testWidgets('US-14 patient home displays live API 7-day averages from ReportsRepository', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+
+    final fakeRepo = FakeReportsRepository((patientId, fieldKeys, days, token, {from, to}) async {
+      return LivePatientReport(
+        summary: PatientSummaryDto(
+          patientId: patientId,
+          from: '2026-11-19',
+          to: '2026-11-25',
+          fields: const [
+            FieldSummaryDto(fieldKey: 'systolic', min: 141, max: 141, avg: 141, count: 3),
+            FieldSummaryDto(fieldKey: 'diastolic', min: 89, max: 89, avg: 89, count: 3),
+            FieldSummaryDto(fieldKey: 'glucose', min: 123, max: 123, avg: 123, count: 3),
+          ],
+          missedDays: 4,
+          outOfRangeCount: 3,
+        ),
+        series: const {},
+      );
+    });
+
+    final state = AppState(persist: false, enableLiveApi: false, reportsRepo: fakeRepo);
+    await state.load();
+    state.setSettings(state.settings.copyWith(lang: Lang.en));
+    state.signIn('p1');
+    state.token = 'live-test-token';
+
+    await tester.pumpWidget(EHealthApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.textContaining('141/89'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('141/89'), findsOneWidget);
+    expect(find.textContaining('123'), findsWidgets);
+  });
+
+  testWidgets('US-13 family view is read-only and hides Record tab and button', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(persist: false, enableLiveApi: false);
+    await state.load();
+    state.setSettings(state.settings.copyWith(lang: Lang.en));
+    state.signIn('f1');
+
+    await tester.pumpWidget(EHealthApp(state: state));
+    await tester.pumpAndSettle();
+
+    expect(find.text('View only'), findsOneWidget);
+    expect(find.text('Record now'), findsNothing);
+    expect(state.visibleTabs.contains(AppTab.record), isFalse);
   });
 }

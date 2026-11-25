@@ -58,6 +58,8 @@ export function PatientPage() {
   );
   const seriesKeysKey = [...MEASURE_ORDER, ...fields.map((f) => f.id)].join(',');
   const apiDays = Math.min(365, Math.max(1, range.days));
+  const apiFrom = period === 'custom' ? dayKey(range.from) : undefined;
+  const apiTo = period === 'custom' ? dayKey(range.to) : undefined;
   const [apiSummary, setApiSummary] = useState<PatientSummary | null>(null);
   const [apiSeries, setApiSeries] = useState<Record<string, PatientSeries> | null>(null);
   const [apiError, setApiError] = useState<ApiClientError | null>(null);
@@ -74,9 +76,10 @@ export function PatientPage() {
     }
     const ctrl = new AbortController();
     const keys = seriesKeysKey ? seriesKeysKey.split(',') : [];
+    const custom = apiFrom && apiTo ? { from: apiFrom, to: apiTo } : undefined;
     setApiLoading(true);
     setApiError(null);
-    fetchPatientReport(id, keys, apiDays, token, ctrl.signal)
+    fetchPatientReport(id, keys, apiDays, token, ctrl.signal, custom)
       .then(({ summary, series }) => {
         setApiSummary(summary);
         setApiSeries(series);
@@ -94,7 +97,7 @@ export function PatientPage() {
         setApiLoading(false);
       });
     return () => ctrl.abort();
-  }, [token, allowed, id, apiDays, seriesKeysKey, retryTick]);
+  }, [token, allowed, id, apiDays, apiFrom, apiTo, seriesKeysKey, retryTick]);
 
   if (!p || !canView(id)) {
     return (

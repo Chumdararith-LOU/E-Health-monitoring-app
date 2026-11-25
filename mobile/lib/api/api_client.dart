@@ -147,29 +147,39 @@ class ApiClient {
     return DevLoginResult.fromJson(json);
   }
 
-  /// `GET /patients/:patientId/summary?days=...`
+  /// `GET /patients/:patientId/summary?days=...` (or `?from=YYYY-MM-DD&to=YYYY-MM-DD`)
   Future<PatientSummaryDto> getPatientSummary(
     String patientId, {
     required int days,
     required String token,
+    String? from,
+    String? to,
   }) async {
     final encodedId = Uri.encodeComponent(patientId);
-    final json = await requestJson('GET', '/patients/$encodedId/summary?days=$days', token: token);
+    final query = from != null && to != null
+        ? 'from=${Uri.encodeQueryComponent(from)}&to=${Uri.encodeQueryComponent(to)}'
+        : 'days=$days';
+    final json = await requestJson('GET', '/patients/$encodedId/summary?$query', token: token);
     return PatientSummaryDto.fromJson(json);
   }
 
-  /// `GET /patients/:patientId/series?field=...&days=...`
+  /// `GET /patients/:patientId/series?field=...&days=...` (or `&from=...&to=...`)
   Future<PatientSeriesDto> getPatientSeries(
     String patientId, {
     required String field,
     required int days,
     required String token,
+    String? from,
+    String? to,
   }) async {
     final encodedId = Uri.encodeComponent(patientId);
     final encodedField = Uri.encodeQueryComponent(field);
+    final rangeQuery = from != null && to != null
+        ? 'from=${Uri.encodeQueryComponent(from)}&to=${Uri.encodeQueryComponent(to)}'
+        : 'days=$days';
     final json = await requestJson(
       'GET',
-      '/patients/$encodedId/series?field=$encodedField&days=$days',
+      '/patients/$encodedId/series?field=$encodedField&$rangeQuery',
       token: token,
     );
     return PatientSeriesDto.fromJson(json);
@@ -181,11 +191,14 @@ class ApiClient {
     required List<String> fieldKeys,
     required int days,
     required String token,
+    String? from,
+    String? to,
   }) async {
     final uniqueFields = fieldKeys.toSet().toList();
-    final summaryFuture = getPatientSummary(patientId, days: days, token: token);
+    final summaryFuture = getPatientSummary(patientId, days: days, token: token, from: from, to: to);
     final seriesFutures = [
-      for (final f in uniqueFields) getPatientSeries(patientId, field: f, days: days, token: token),
+      for (final f in uniqueFields)
+        getPatientSeries(patientId, field: f, days: days, token: token, from: from, to: to),
     ];
 
     final summary = await summaryFuture;

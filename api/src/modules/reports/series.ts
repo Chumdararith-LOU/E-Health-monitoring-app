@@ -1,29 +1,23 @@
 import type { PatientSeries, SeriesPoint } from '@ehealth/types';
-import { dayKey, type ReadingInput } from './summary';
+import { buildWindowDays, type DateWindowOptions, dayKey, type ReadingInput } from './summary';
 
-export interface SeriesInput {
+export interface SeriesInput extends DateWindowOptions {
   patientId: string;
   fieldKey: string;
-  days: number;
   readings: ReadingInput[];
-  now?: Date;
-  timeZone?: string;
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function computeSeries({
   patientId,
   fieldKey,
-  days,
+  days = 7,
+  from,
+  to,
   readings,
   now = new Date(),
   timeZone = 'Asia/Phnom_Penh',
 }: SeriesInput): PatientSeries {
-  const windowDays: string[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    windowDays.push(dayKey(new Date(now.getTime() - i * DAY_MS), timeZone));
-  }
+  const windowDays = buildWindowDays({ days, from, to, now, timeZone });
   const inWindow = new Set(windowDays);
 
   const points: SeriesPoint[] = readings

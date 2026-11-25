@@ -2,7 +2,7 @@
 
 import type { PatientSeries, PatientSummary } from '@ehealth/types';
 import type { ChartPoint } from '../ui/Charts';
-import { apiGetPatientSeries, apiGetPatientSummary } from './api';
+import { apiGetPatientSeries, apiGetPatientSummary, type DateRangeQuery } from './api';
 
 export interface LivePatientReport {
   summary: PatientSummary;
@@ -19,11 +19,12 @@ export async function fetchPatientReport(
   days: number,
   token: string,
   signal?: AbortSignal,
+  range?: DateRangeQuery,
 ): Promise<LivePatientReport> {
   const uniqueFields = Array.from(new Set(fieldKeys));
   const [summary, ...seriesList] = await Promise.all([
-    apiGetPatientSummary(patientId, days, token, signal),
-    ...uniqueFields.map((field) => apiGetPatientSeries(patientId, field, days, token, signal)),
+    apiGetPatientSummary(patientId, days, token, signal, range),
+    ...uniqueFields.map((field) => apiGetPatientSeries(patientId, field, days, token, signal, range)),
   ]);
 
   const series: Record<string, PatientSeries> = {};

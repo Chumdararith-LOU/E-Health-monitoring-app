@@ -13,6 +13,8 @@ abstract class ReportsRepository {
     required List<String> fieldKeys,
     required int days,
     required String token,
+    String? from,
+    String? to,
   });
 }
 
@@ -27,8 +29,17 @@ class ApiReportsRepository implements ReportsRepository {
     required List<String> fieldKeys,
     required int days,
     required String token,
+    String? from,
+    String? to,
   }) {
-    return api.getPatientReport(patientId, fieldKeys: fieldKeys, days: days, token: token);
+    return api.getPatientReport(
+      patientId,
+      fieldKeys: fieldKeys,
+      days: days,
+      token: token,
+      from: from,
+      to: to,
+    );
   }
 }
 
@@ -39,8 +50,10 @@ class FakeReportsRepository implements ReportsRepository {
     String patientId,
     List<String> fieldKeys,
     int days,
-    String token,
-  ) handler;
+    String token, {
+    String? from,
+    String? to,
+  }) handler;
 
   @override
   Future<LivePatientReport> fetchPatientReport(
@@ -48,8 +61,10 @@ class FakeReportsRepository implements ReportsRepository {
     required List<String> fieldKeys,
     required int days,
     required String token,
+    String? from,
+    String? to,
   }) =>
-      handler(patientId, fieldKeys, days, token);
+      handler(patientId, fieldKeys, days, token, from: from, to: to);
 }
 
 /// Converts API series points into LineChart points sorted ascending by time.

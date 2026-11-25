@@ -72,6 +72,35 @@ describe('GET /patients/:patientId/summary', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('validation_failed');
   });
+
+  it('200 for custom from/to date range and 400 when from > to or unpaired', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const custom = await request(app)
+      .get(url(own, `?from=${weekAgo}&to=${today}`))
+      .set('Authorization', await as('patient'));
+    expect(custom.status).toBe(200);
+    expect(custom.body.from).toBe(weekAgo);
+    expect(custom.body.to).toBe(today);
+
+    const inverted = await request(app)
+      .get(url(own, `?from=${today}&to=${weekAgo}`))
+      .set('Authorization', await as('patient'));
+    expect(inverted.status).toBe(400);
+
+    const unpaired = await request(app)
+      .get(url(own, `?from=${weekAgo}`))
+      .set('Authorization', await as('patient'));
+    expect(unpaired.status).toBe(400);
+  });
+
+  it('computes outOfRangeCount using SQLite custom_fields normal ranges', async () => {
+    // p4 has high BP (~148/90) seeded in SQLite, exceeding normalMax (129/84).
+    const res = await request(app).get(url('p4', '?days=30')).set('Authorization', await as('doctor'));
+    expect(res.status).toBe(200);
+    expect(res.body.outOfRangeCount).toBeGreaterThan(0);
+  });
 });
 
 describe('GET /patients/:patientId/series', () => {
