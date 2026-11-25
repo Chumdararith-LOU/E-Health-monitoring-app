@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ApiError } from '@ehealth/types';
 import cors from 'cors';
 import express, { type ErrorRequestHandler } from 'express';
@@ -44,6 +46,16 @@ export function createApp(db: () => Db = getDb) {
   });
   if (config.DEV_LOGIN) app.use('/api/v1', devRouter);
   for (const router of moduleRouters) app.use('/api/v1', router);
+
+  // Unknown API paths always return a structured JSON ApiError.
+  app.use('/api', (_req, _res, next) => next(notFound()));
+
+  // In single-container deployments, serve the built React web portal from WEB_DIST_DIR.
+  const webDist = config.WEB_DIST_DIR;
+  if (webDist && existsSync(join(webDist, 'index.html'))) {
+    app.use(express.static(webDist));
+    app.get('/', (_req, res) => res.sendFile(join(webDist, 'index.html')));
+  }
 
   app.use((_req, _res, next) => next(notFound()));
   app.use(errorHandler);
