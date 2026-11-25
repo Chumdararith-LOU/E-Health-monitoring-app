@@ -60,7 +60,12 @@ class SettingsScreen extends StatelessWidget {
           label: t('textSize'),
           value: s.textScale,
           onChanged: (v) => set(s.copyWith(textScale: v)),
-          options: [SegOption(1, t('textNormal')), SegOption(1.15, t('textLarge')), SegOption(1.3, t('textXL'))],
+          options: [
+            SegOption(0.85, t('textSmall')),
+            SegOption(1, t('textNormal')),
+            SegOption(1.15, t('textLarge')),
+            SegOption(1.3, t('textXL')),
+          ],
         ),
       ]),
       if (user.role == Role.patient) ...[
