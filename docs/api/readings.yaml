@@ -1,0 +1,309 @@
+# Readings & custom fields module (US-04, US-05, US-06, US-16).
+patientReadings:
+  get:
+    tags: [readings]
+    operationId: listPatientReadings
+    summary: List a patient's readings newest first (US-06)
+    parameters:
+      - name: patientId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: from
+        in: query
+        required: false
+        description: Start date YYYY-MM-DD (Asia/Phnom_Penh)
+        schema: { type: string, format: date }
+      - name: to
+        in: query
+        required: false
+        description: End date YYYY-MM-DD (Asia/Phnom_Penh)
+        schema: { type: string, format: date }
+      - name: limit
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+    responses:
+      '200':
+        description: Readings ordered newest first
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [readings]
+              properties:
+                readings:
+                  type: array
+                  items:
+                    $ref: '#/schemas/Reading'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+  post:
+    tags: [readings]
+    operationId: createPatientReading
+    summary: Record a new reading for a patient (US-04)
+    parameters:
+      - name: patientId
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/schemas/CreateReadingInput'
+          example:
+            method: manual
+            note: After waking up
+            values:
+              systolic: 124
+              diastolic: 78
+              pulse: 72
+              glucose: 104
+    responses:
+      '201':
+        description: Reading created
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/Reading'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+
+patientReadingById:
+  put:
+    tags: [readings]
+    operationId: updatePatientReading
+    summary: Edit an existing reading (US-05)
+    parameters:
+      - name: patientId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: readingId
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/schemas/UpdateReadingInput'
+    responses:
+      '200':
+        description: Reading updated
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/Reading'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+      '404':
+        $ref: './common.yaml#/responses/NotFound'
+  delete:
+    tags: [readings]
+    operationId: deletePatientReading
+    summary: Delete a reading (US-05)
+    parameters:
+      - name: patientId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: readingId
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      '204':
+        description: Reading deleted
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+      '404':
+        $ref: './common.yaml#/responses/NotFound'
+
+fields:
+  get:
+    tags: [readings]
+    operationId: listCustomFields
+    summary: List built-in and admin-defined tracked fields (US-16)
+    parameters:
+      - name: includeArchived
+        in: query
+        required: false
+        schema: { type: boolean, default: false }
+    responses:
+      '200':
+        description: Tracked fields
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fields]
+              properties:
+                fields:
+                  type: array
+                  items:
+                    $ref: '#/schemas/CustomField'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+  post:
+    tags: [readings]
+    operationId: createCustomField
+    summary: Add a new admin-defined tracked field (US-16, admin only)
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/schemas/CreateFieldInput'
+          example:
+            id: temperature
+            nameEn: Temperature
+            nameKm: សីតុណ្ហភាព
+            unit: '°C'
+            decimals: 1
+            minValue: 34
+            maxValue: 43
+    responses:
+      '201':
+        description: Field created
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/CustomField'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+      '409':
+        $ref: './common.yaml#/responses/Conflict'
+
+fieldById:
+  put:
+    tags: [readings]
+    operationId: updateCustomField
+    summary: Update, archive, or restore a tracked field (US-16, admin only)
+    parameters:
+      - name: fieldId
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/schemas/UpdateFieldInput'
+    responses:
+      '200':
+        description: Field updated
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/CustomField'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '403':
+        $ref: './common.yaml#/responses/Forbidden'
+      '404':
+        $ref: './common.yaml#/responses/NotFound'
+      '409':
+        $ref: './common.yaml#/responses/Conflict'
+
+schemas:
+  Reading:
+    type: object
+    required: [id, patientId, enteredBy, measuredAt, method, note, photoUri, values, createdAt, updatedAt]
+    properties:
+      id: { type: string }
+      patientId: { type: string }
+      enteredBy: { type: string }
+      measuredAt: { type: string, format: date-time }
+      method: { type: string, enum: [manual, ocr] }
+      note: { type: [string, 'null'] }
+      photoUri: { type: [string, 'null'] }
+      values:
+        type: object
+        additionalProperties: { type: number }
+      createdAt: { type: string, format: date-time }
+      updatedAt: { type: [string, 'null'], format: date-time }
+  CreateReadingInput:
+    type: object
+    required: [values]
+    properties:
+      measuredAt: { type: string, format: date-time }
+      method: { type: string, enum: [manual, ocr] }
+      note: { type: [string, 'null'] }
+      photoUri: { type: [string, 'null'] }
+      values:
+        type: object
+        additionalProperties: { type: number }
+  UpdateReadingInput:
+    type: object
+    properties:
+      measuredAt: { type: string, format: date-time }
+      note: { type: [string, 'null'] }
+      values:
+        type: object
+        additionalProperties: { type: number }
+  CustomField:
+    type: object
+    required: [id, nameEn, nameKm, unit, decimals, minValue, maxValue, normalMin, normalMax, builtIn, active, usedCount]
+    properties:
+      id: { type: string }
+      nameEn: { type: string }
+      nameKm: { type: string }
+      unit: { type: string }
+      decimals: { type: integer }
+      minValue: { type: number }
+      maxValue: { type: number }
+      normalMin: { type: [number, 'null'] }
+      normalMax: { type: [number, 'null'] }
+      builtIn: { type: boolean }
+      active: { type: boolean }
+      usedCount: { type: integer }
+  CreateFieldInput:
+    type: object
+    required: [nameEn, nameKm, unit, minValue, maxValue]
+    properties:
+      id: { type: string }
+      nameEn: { type: string }
+      nameKm: { type: string }
+      unit: { type: string }
+      decimals: { type: integer, minimum: 0, maximum: 2 }
+      minValue: { type: number }
+      maxValue: { type: number }
+      normalMin: { type: [number, 'null'] }
+      normalMax: { type: [number, 'null'] }
+  UpdateFieldInput:
+    type: object
+    properties:
+      nameEn: { type: string }
+      nameKm: { type: string }
+      unit: { type: string }
+      decimals: { type: integer, minimum: 0, maximum: 2 }
+      minValue: { type: number }
+      maxValue: { type: number }
+      normalMin: { type: [number, 'null'] }
+      normalMax: { type: [number, 'null'] }
+      active: { type: boolean }

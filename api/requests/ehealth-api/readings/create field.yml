@@ -1,0 +1,23 @@
+info:
+  name: create field
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/fields"
+  body:
+    type: json
+    data: |-
+      {
+        "id": "temperature",
+        "nameEn": "Temperature",
+        "nameKm": "សីតុណ្ហភាព",
+        "unit": "°C",
+        "decimals": 1,
+        "minValue": 34,
+        "maxValue": 43,
+        "normalMin": 36.1,
+        "normalMax": 37.5
+      }
+  auth: inherit
