@@ -91,4 +91,37 @@ describe('web reports helpers', () => {
     expect(Object.keys(result.series).sort()).toEqual(['diastolic', 'systolic']);
     expect(result.series.systolic.points[0].value).toBe(110);
   });
+
+  it('sends from/to query params instead of days when a custom range is given', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.includes('/summary?')) {
+          return new Response(
+            JSON.stringify({
+              patientId: 'p1',
+              from: '2026-11-10',
+              to: '2026-11-20',
+              fields: [],
+              missedDays: 11,
+              outOfRangeCount: 0,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify(makeSeries('systolic', [])), { status: 200 });
+      }),
+    );
+
+    await fetchPatientReport('p1', ['systolic'], 11, 'jwt', undefined, {
+      from: '2026-11-10',
+      to: '2026-11-20',
+    });
+
+    expect(urls[0]).toContain('from=2026-11-10&to=2026-11-20');
+    expect(urls[1]).toContain('field=systolic&from=2026-11-10&to=2026-11-20');
+  });
 });

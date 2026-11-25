@@ -84,13 +84,21 @@ export function apiDevLogin(role: 'doctor' | 'admin'): Promise<DevLoginResponse>
   });
 }
 
+export interface DateRangeQuery {
+  from?: string;
+  to?: string;
+}
+
 export function apiGetPatientSummary(
   patientId: string,
   days: number,
   token: string,
   signal?: AbortSignal,
+  range?: DateRangeQuery,
 ): Promise<PatientSummary> {
-  const query = new URLSearchParams({ days: String(days) });
+  const query = new URLSearchParams(
+    range?.from && range?.to ? { from: range.from, to: range.to } : { days: String(days) },
+  );
   return apiRequest<PatientSummary>(`/patients/${encodeURIComponent(patientId)}/summary?${query}`, {
     token,
     signal,
@@ -103,8 +111,13 @@ export function apiGetPatientSeries(
   days: number,
   token: string,
   signal?: AbortSignal,
+  range?: DateRangeQuery,
 ): Promise<PatientSeries> {
-  const query = new URLSearchParams({ field, days: String(days) });
+  const query = new URLSearchParams(
+    range?.from && range?.to
+      ? { field, from: range.from, to: range.to }
+      : { field, days: String(days) },
+  );
   return apiRequest<PatientSeries>(`/patients/${encodeURIComponent(patientId)}/series?${query}`, {
     token,
     signal,

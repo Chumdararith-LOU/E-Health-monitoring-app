@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../../api/api_client.dart';
 import '../../api/api_models.dart';
 import '../../api/reports_repository.dart';
+import '../../data/dates.dart';
 import '../../data/ranges.dart';
 import '../../data/stats.dart';
 import '../../data/types.dart';
@@ -63,11 +64,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final range = _currentRange();
     final apiDays = range.days.clamp(1, 365);
+    final isCustom = _period == _custom && _customRange != null;
+    final apiFrom = isCustom ? dayKey(range.from) : null;
+    final apiTo = isCustom ? dayKey(range.to) : null;
     final fieldKeys = [
       for (final k in measureOrder) k.name,
       for (final f in st.data.fields) f.id,
     ];
-    final queryKey = '$token|${patient.id}|$apiDays|${fieldKeys.join(",")}';
+    final queryKey = '$token|${patient.id}|$apiDays|$apiFrom|$apiTo|${fieldKeys.join(",")}';
     if (!force && queryKey == _lastQueryKey) return;
 
     _lastQueryKey = queryKey;
@@ -77,7 +81,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     unawaited(
       st.reportsRepo
-          .fetchPatientReport(patient.id, fieldKeys: fieldKeys, days: apiDays, token: token)
+          .fetchPatientReport(
+            patient.id,
+            fieldKeys: fieldKeys,
+            days: apiDays,
+            token: token,
+            from: apiFrom,
+            to: apiTo,
+          )
           .then((report) {
         if (!mounted || currentReq != _reqId) return;
         setState(() {

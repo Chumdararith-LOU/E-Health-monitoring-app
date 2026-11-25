@@ -1,8 +1,15 @@
 // One patient's status: today card, latest reading, last 7 days, doctor's
-// notes. Used on the patient's Home and on the patient page for other roles.
+// notes. Used on the patient's Home (US-14) and on the patient page for
+// family / caretaker / doctor roles (US-13, US-12).
+// Fetches a live 7-day report from the API when signed in with a token,
+// falling back seamlessly to local demo data when offline or empty.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../api/api_models.dart';
+import '../../api/reports_repository.dart';
 import '../../data/dates.dart';
 import '../../data/ranges.dart';
 import '../../data/stats.dart';
@@ -14,8 +21,11 @@ import '../shell.dart';
 
 /// Today's status: the single most important thing on Home (FR-13 / US-14).
 class TodayCard extends StatelessWidget {
-  const TodayCard({super.key, required this.patientId});
+  const TodayCard({super.key, required this.patientId, this.liveRecordedAt});
   final String patientId;
+
+  /// Optional timestamp from the live API when a reading was recorded today.
+  final DateTime? liveRecordedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +33,7 @@ class TodayCard extends StatelessWidget {
     final i18n = st.i18n;
     final t = i18n.t;
     final today = st.todayReadingOf(patientId);
+    final recordedAt = liveRecordedAt ?? today?.takenAt;
     final recordable = st.canRecord(patientId);
     void goRecord() {
       if (st.user?.role != Role.patient) st.selectPatient(patientId);
@@ -39,9 +50,9 @@ class TodayCard extends StatelessWidget {
           ),
         ]);
 
-    if (today != null) {
+    if (recordedAt != null) {
       return AppCard(tone: CardTone.ok, children: [
-        head(Mdi.checkCircle, C.ok, t('recordedToday', {'time': i18n.time(today.takenAt)})),
+        head(Mdi.checkCircle, C.ok, t('recordedToday', {'time': i18n.time(recordedAt)})),
         if (recordable)
           AppButton(variant: BtnVariant.secondary, icon: Mdi.plus, label: t('addAnother'), onPressed: goRecord),
       ]);
@@ -56,26 +67,112 @@ class TodayCard extends StatelessWidget {
   }
 }
 
-class PatientOverview extends StatelessWidget {
+class PatientOverview extends StatefulWidget {
   const PatientOverview({super.key, required this.patientId, this.showToday = true});
   final String patientId;
   final bool showToday;
+
+  @override
+  State<PatientOverview> createState() => _PatientOverviewState();
+}
+
+class _PatientOverviewState extends State<PatientOverview> {
+  static const _homeFields = ['systolic', 'diastolic', 'glucose'];
+
+  String? _lastQueryKey;
+  int _reqId = 0;
+  LivePatientReport? _liveReport;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncLiveHome(AppScope.of(context));
+  }
+
+  @override
+  void didUpdateWidget(covariant PatientOverview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.patientId != widget.patientId) {
+      _syncLiveHome(AppScope.read(context));
+    }
+  }
+
+  void _syncLiveHome(AppState st) {
+    final token = st.token;
+    if (token == null || !st.canView(widget.patientId)) {
+      _lastQueryKey = null;
+      _reqId++;
+      _liveReport = null;
+      return;
+    }
+
+    final queryKey = '$token|${widget.patientId}';
+    if (queryKey == _lastQueryKey) return;
+    _lastQueryKey = queryKey;
+    final currentReq = ++_reqId;
+
+    unawaited(
+      st.reportsRepo
+          .fetchPatientReport(widget.patientId, fieldKeys: _homeFields, days: 7, token: token)
+          .then((report) {
+        if (!mounted || currentReq != _reqId) return;
+        setState(() => _liveReport = report);
+      }).catchError((Object _) {
+        // Offline or unreachable API → keep local demo data without blocking Home.
+      }),
+    );
+  }
+
+  DateTime? _liveTodayTimestamp(PatientSummaryDto? summary, DateTime now) {
+    if (summary == null) return null;
+    DateTime? latest;
+    for (final f in summary.fields) {
+      final ts = f.latestMeasuredAt?.toLocal();
+      if (ts != null && isSameDay(ts, now)) {
+        if (latest == null || ts.isAfter(latest)) latest = ts;
+      }
+    }
+    return latest;
+  }
 
   @override
   Widget build(BuildContext context) {
     final st = AppScope.of(context);
     final i18n = st.i18n;
     final t = i18n.t;
+    final patientId = widget.patientId;
     final all = st.readingsOf(patientId);
     final latest = all.isEmpty ? null : all.first;
     final week = inRange(all, lastNDays(7)).reversed.toList();
-    final sys = statOf(week, (r) => r.systolic);
-    final dia = statOf(week, (r) => r.diastolic);
-    final glu = statOf(week, (r) => r.glucose);
+
+    final liveSummary = _liveReport?.summary;
+    final liveSeries = _liveReport?.series;
+
+    final sys = pickFieldStat(liveSummary, 'systolic', statOf(week, (r) => r.systolic));
+    final dia = pickFieldStat(liveSummary, 'diastolic', statOf(week, (r) => r.diastolic));
+    final glu = pickFieldStat(liveSummary, 'glucose', statOf(week, (r) => r.glucose));
+
+    final sysPoints = pickChartPoints(
+      liveSeries,
+      'systolic',
+      [for (final r in week) if (r.systolic != null) ChartPoint(r.takenAt, r.systolic!, r.id)],
+    );
+    final gluPoints = pickChartPoints(
+      liveSeries,
+      'glucose',
+      [for (final r in week) if (r.glucose != null) ChartPoint(r.takenAt, r.glucose!, r.id)],
+    );
+
     final now = DateTime.now();
     final days = [for (var i = 0; i < 7; i++) addDays(now, i - 6)];
-    final recorded = {for (final r in week) dayKey(r.takenAt)};
-    final hasToday = st.todayReadingOf(patientId) != null;
+    final liveTodayAt = _liveTodayTimestamp(liveSummary, now);
+    final liveDays = <String>{
+      if (liveSeries != null)
+        for (final s in liveSeries.values)
+          for (final p in s.points) dayKey(p.measuredAt.toLocal()),
+    };
+    final recorded = liveDays.isNotEmpty ? liveDays : {for (final r in week) dayKey(r.takenAt)};
+    final hasToday = liveTodayAt != null || st.todayReadingOf(patientId) != null;
     final notes = st.data.notes.where((n) => n.patientId == patientId).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
@@ -108,7 +205,7 @@ class PatientOverview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: gapped([
-        if (showToday) TodayCard(patientId: patientId),
+        if (widget.showToday) TodayCard(patientId: patientId, liveRecordedAt: liveTodayAt),
         SectionTitle(t('latestReading')),
         if (latest != null)
           AppCard(
@@ -155,13 +252,13 @@ class PatientOverview extends StatelessWidget {
               '${t('bp')} · ${t('avg')}',
               sys.count > 0 ? '${i18n.n(sys.avg)}/${i18n.n(dia.avg)}' : '–',
               null,
-              [for (final r in week) if (r.systolic != null) r.systolic!],
+              [for (final p in sysPoints) p.v],
             ),
             trendRow(
               '${t('m_glucose')} · ${t('avg')}',
               glu.count > 0 ? i18n.n(glu.avg) : '–',
               'mg/dL',
-              [for (final r in week) if (r.glucose != null) r.glucose!],
+              [for (final p in gluPoints) p.v],
             ),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               AppText(t('seeReport'), variant: TextVariant.label, weight: W.semibold, color: C.primary),
