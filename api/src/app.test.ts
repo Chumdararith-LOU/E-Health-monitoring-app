@@ -1,6 +1,10 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from './app';
+import { config } from './config';
 import { createDb } from './shared/db';
 
 // The app's database is in-memory here (see vitest.config.ts)
@@ -35,5 +39,26 @@ describe('app', () => {
     const res = await request(app).get('/api/v1/nope');
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: { code: 'not_found', messageKey: 'errors.not_found' } });
+  });
+
+  it('serves built web portal from WEB_DIST_DIR while keeping /api/* as JSON 404', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ehealth-web-dist-'));
+    const prev = config.WEB_DIST_DIR;
+    try {
+      writeFileSync(join(dir, 'index.html'), '<!doctype html><html><body>E-Health Web</body></html>');
+      config.WEB_DIST_DIR = dir;
+      const deployedApp = createApp();
+
+      const home = await request(deployedApp).get('/');
+      expect(home.status).toBe(200);
+      expect(home.text).toContain('E-Health Web');
+
+      const missingApi = await request(deployedApp).get('/api/v1/nope');
+      expect(missingApi.status).toBe(404);
+      expect(missingApi.body).toEqual({ error: { code: 'not_found', messageKey: 'errors.not_found' } });
+    } finally {
+      config.WEB_DIST_DIR = prev;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

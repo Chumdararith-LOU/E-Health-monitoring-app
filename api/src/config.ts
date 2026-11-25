@@ -19,7 +19,9 @@ const schema = z
     DB_FILE: z.string().min(1).default('./data/ehealth.db'),
     JWT_SECRET: z.string().min(1).optional(),
     DEV_LOGIN: z.stringbool().optional(),
+    SEED_DEMO: z.stringbool().default(false),
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
+    WEB_DIST_DIR: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.JWT_SECRET) {
@@ -32,6 +34,7 @@ const schema = z
     JWT_SECRET: env.JWT_SECRET ?? DEV_JWT_SECRET,
     DEV_LOGIN:
       env.NODE_ENV === 'production' ? false : (env.DEV_LOGIN ?? env.NODE_ENV === 'development'),
+    WEB_DIST_DIR: env.WEB_DIST_DIR ? resolve(apiDir, env.WEB_DIST_DIR) : undefined,
   }));
 
 const parsed = schema.safeParse(process.env);
