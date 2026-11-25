@@ -85,18 +85,17 @@ class _SmoothIndexedStack extends StatelessWidget {
             ignoring: i != index,
             child: ExcludeSemantics(
               excluding: i != index,
-              child: TickerMode(
-                enabled: i == index,
-                child: AnimatedOpacity(
-                  opacity: i == index ? 1.0 : 0.0,
+              // TickerMode sits inside the fade so the outgoing tab can
+              // still fade out; only the tab's own animations pause.
+              child: AnimatedOpacity(
+                opacity: i == index ? 1.0 : 0.0,
+                duration: D.animFast,
+                curve: D.animCurve,
+                child: AnimatedSlide(
+                  offset: i == index ? Offset.zero : const Offset(0, 0.012),
                   duration: D.animFast,
                   curve: D.animCurve,
-                  child: AnimatedSlide(
-                    offset: i == index ? Offset.zero : const Offset(0, 0.012),
-                    duration: D.animFast,
-                    curve: D.animCurve,
-                    child: children[i],
-                  ),
+                  child: TickerMode(enabled: i == index, child: children[i]),
                 ),
               ),
             ),
