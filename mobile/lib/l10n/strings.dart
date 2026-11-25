@@ -14,6 +14,31 @@ const _monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'
 const _daysKm = ['អាទិត្យ', 'ច័ន្ទ', 'អង្គារ', 'ពុធ', 'ព្រហស្បតិ៍', 'សុក្រ', 'សៅរ៍'];
 const _daysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/// Translations for API error messageKeys (api/src/shared/errors.ts + network errors).
+const Map<String, String> apiErrorsKm = {
+  'errors.bad_request': 'សំណើមិនត្រឹមត្រូវទេ។ សូមពិនិត្យព័ត៌មានម្តងទៀត។',
+  'errors.validation_failed': 'ទិន្នន័យដែលបានបញ្ចូលមិនត្រឹមត្រូវទេ។',
+  'errors.unauthorized': 'សម័យប្រើប្រាស់ផុតកំណត់ ឬមិនទាន់ចូលគណនី។ សូមចូលម្តងទៀត។',
+  'errors.forbidden': 'អ្នកមិនមានសិទ្ធិមើលទិន្នន័យនេះទេ។',
+  'errors.not_found': 'រកមិនឃើញទិន្នន័យដែលបានស្នើសុំទេ។',
+  'errors.conflict': 'ទិន្នន័យនេះមានរួចហើយ។',
+  'errors.db_unavailable': 'ប្រព័ន្ធទិន្នន័យមិនអាចភ្ជាប់បានជាបណ្តោះអាសន្ន។ សូមព្យាយាមម្តងទៀត។',
+  'errors.internal_error': 'មានបញ្ហាបច្ចេកទេសនៅម៉ាស៊ីនមេ។ សូមព្យាយាមម្តងទៀត។',
+  'errors.network': 'មិនអាចភ្ជាប់ទៅម៉ាស៊ីនមេបានទេ។ សូមពិនិត្យការតភ្ជាប់អ៊ីនធឺណិត។',
+};
+
+const Map<String, String> apiErrorsEn = {
+  'errors.bad_request': 'Invalid request. Please check your input and try again.',
+  'errors.validation_failed': 'Some fields are invalid. Please check and try again.',
+  'errors.unauthorized': 'Session expired or not signed in. Please sign in again.',
+  'errors.forbidden': 'You do not have permission to view this data.',
+  'errors.not_found': 'The requested record was not found.',
+  'errors.conflict': 'This record already exists.',
+  'errors.db_unavailable': 'Database is temporarily unavailable. Please try again.',
+  'errors.internal_error': 'Something went wrong on the server. Please try again.',
+  'errors.network': 'Could not reach the server. Please check your connection.',
+};
+
 String toKhmerDigits(String s) => s.replaceAllMapped(RegExp('[0-9]'), (m) => _khmerDigits[int.parse(m[0]!)]);
 
 /// Converts Khmer digits typed on a Khmer keyboard back to plain digits.
@@ -91,4 +116,9 @@ class I18n {
   String name(Named? u) => u == null ? '' : (isKm ? u.nameKm : u.nameEn);
 
   String role(Role r) => t('role_${r.name}');
+
+  String apiError(String messageKey) {
+    final map = isKm ? apiErrorsKm : apiErrorsEn;
+    return map[messageKey] ?? map['errors.internal_error']!;
+  }
 }

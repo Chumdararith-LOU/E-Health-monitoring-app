@@ -74,7 +74,7 @@ void main() {
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
 
-    final state = AppState(persist: false);
+    final state = AppState(persist: false, enableLiveApi: false);
     await state.load();
     await tester.pumpWidget(EHealthApp(state: state));
     await tester.pumpAndSettle();
