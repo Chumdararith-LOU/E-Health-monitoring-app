@@ -26,7 +26,15 @@ paths:
     $ref: './reports.yaml#/series'
 
   # accounts – Phayuk: add one line per path here, pointing to ./accounts.yaml
-  # readings – Seyla: add one line per path here, pointing to ./readings.yaml
+  # readings – Seyla
+  /patients/{patientId}/readings:
+    $ref: './readings.yaml#/patientReadings'
+  /patients/{patientId}/readings/{readingId}:
+    $ref: './readings.yaml#/patientReadingById'
+  /fields:
+    $ref: './readings.yaml#/fields'
+  /fields/{fieldId}:
+    $ref: './readings.yaml#/fieldById'
   # ocr – Phak: add one line per path here, pointing to ./ocr.yaml
 components:
   securitySchemes:

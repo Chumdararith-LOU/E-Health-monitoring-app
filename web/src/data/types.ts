@@ -1,88 +1,84 @@
-// Shared data shapes. When the real API arrives (GET /patients, /patients/{id}/summary,
-// /users, /fields …), map the JSON into these types and the pages keep working.
-
-export type Lang = 'km' | 'en';
 export type Role = 'patient' | 'caretaker' | 'family' | 'doctor' | 'admin';
-export type EntryMethod = 'manual' | 'ocr' | 'ocrEdited';
+export type Lang = 'km' | 'en';
+export type Numerals = 'khmer' | 'western';
 
-/** Text in both languages. */
-export interface Bi {
-  km: string;
-  en: string;
+export interface User {
+  id: string;
+  role: Role;
+  nameEn: string;
+  nameKm: string;
+  phone: string;
+  /** patients only */
+  age?: number;
+  conditionsEn?: string;
+  conditionsKm?: string;
 }
+
+export type LinkRelation = 'doctor' | 'caretaker' | 'family';
+export type LinkStatus = 'active' | 'pending';
+
+export interface Link {
+  id: string;
+  patientId: string;
+  userId: string;
+  relation: LinkRelation;
+  status: LinkStatus;
+  /** who started it: 'patient' (invite code / phone) or 'other' (request waiting for patient approval) */
+  initiatedBy: 'patient' | 'other';
+  createdAt: string;
+}
+
+export type MeasureKey = 'systolic' | 'diastolic' | 'pulse' | 'glucose';
 
 export interface Reading {
   id: string;
   patientId: string;
-  time: Date;
-  systolic: number;
-  diastolic: number;
-  pulse: number;
-  /** Always mg/dL. */
-  glucose: number;
-  /** Admin custom field values by field id (e.g. wt, temp). */
-  extra: Record<string, number>;
-  note?: Bi;
-  author: 'self' | 'caretaker';
-  method: EntryMethod;
-  photo: boolean;
+  takenAt: string; // ISO
+  systolic?: number;
+  diastolic?: number;
+  pulse?: number;
+  glucose?: number; // always stored in mg/dL
+  extra: Record<string, number>; // admin-defined fields, by field id
+  enteredBy: string; // user id
+  method: 'manual' | 'ocr';
+  note?: string;
+  photoUri?: string;
+  updatedAt?: string;
 }
 
-export interface Person {
-  name: Bi;
-  phone: string;
-}
-
-export interface Patient {
+/** Admin-defined field (FR-15). Created on the web admin; the mobile app only reads them. */
+export interface CustomField {
   id: string;
-  name: Bi;
-  sex: 'f' | 'm';
-  age: number;
-  phone: string;
-  linkedSince: Date;
-  caretaker?: Person;
-  family?: Person;
-  devices: Bi;
+  nameEn: string;
+  nameKm: string;
+  unit: string;
+  decimals: number;
+  min: number; // safe input limit
+  max: number;
+  /** archived fields are hidden from forms but their data stays in reports */
+  active: boolean;
+  createdAt: string;
 }
 
-export interface ClinicalNote {
+export interface DoctorNote {
   id: string;
   patientId: string;
-  time: Date;
-  author: Bi;
-  text: Bi;
+  authorId: string;
+  text: string;
+  createdAt: string;
 }
 
-export interface User {
-  id: string;
-  name: Bi;
-  contact: string;
-  role: Role;
-  active: boolean;
-  created: Date;
+export interface Settings {
+  lang: Lang;
+  numerals: Numerals;
+  textScale: 1 | 1.15 | 1.3;
 }
 
-/**
- * One tracked measure. Core vitals and Admin custom fields (US-16) share
- * this schema, so forms, history, reports and charts treat them the same.
- */
-export interface VitalField {
-  id: string;
-  name: Bi;
-  unit: string;
-  decimal: boolean;
-  hardMin: number;
-  hardMax: number;
-  normalMin: number;
-  normalMax: number;
-  core: boolean;
-  active: boolean;
-}
-
-export interface Session {
-  userId: string;
-  role: 'doctor' | 'admin';
-  name: Bi;
-  expiresAt: number;
-  token?: string;
+export interface DataState {
+  version: number;
+  users: User[];
+  links: Link[];
+  readings: Reading[];
+  fields: CustomField[];
+  notes: DoctorNote[];
 }

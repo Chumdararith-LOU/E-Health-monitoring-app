@@ -1,277 +1,319 @@
-// One place for all app state while there is no backend.
-// Screens read it with AppScope.of(context) and rebuild when it changes.
+// Local-only store (no backend). It plays the role the REST API will play
+// later: every read goes through canView(), every write through canRecord() /
+// canEditReading(), so the screens already behave as they will with the real
+// server (NFR-03). Data and settings are saved on the phone.
 
 import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
+import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../data/mock_data.dart';
-import '../data/models.dart';
+import '../api/api_client.dart';
+import '../api/reports_repository.dart';
+import '../data/dates.dart';
+import '../data/seed.dart';
+import '../data/types.dart';
+import '../l10n/strings.dart';
 
-enum AppLang { km, en }
+const _storageKey = 'ehealth-demo-v1';
 
-enum Role { patient, caretaker, family }
+/// Bottom tabs. Their order and icons never change; roles only hide tabs.
+enum AppTab { home, record, history, reports, settings }
 
-/// What the simulated OCR returns (demo control — Phak replaces this
-/// with the real OCR module).
-enum OcrScenario { clear, partial, failed, misread }
+final _rand = math.Random();
+
+String newId(String prefix) =>
+    '$prefix-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}-${_rand.nextInt(1 << 30).toRadixString(36)}';
 
 class AppState extends ChangeNotifier {
-  AppState() {
-    _load();
+  AppState({
+    bool persist = true,
+    bool enableLiveApi = true,
+    ApiClient? api,
+    ReportsRepository? reportsRepo,
+  })  : _persist = persist,
+        _enableLiveApi = enableLiveApi,
+        api = api ?? ApiClient() {
+    this.reportsRepo = reportsRepo ?? ApiReportsRepository(this.api);
   }
 
-  // Settings
-  AppLang lang = AppLang.km;
-  bool khmerDigits = false;
-  bool reminderOn = true;
-  TimeOfDay reminderTime = const TimeOfDay(hour: 6, minute: 30);
+  final bool _persist;
+  final bool _enableLiveApi;
+  final ApiClient api;
+  late final ReportsRepository reportsRepo;
 
-  // Demo controls
-  Role role = Role.patient;
-  OcrScenario ocrScenario = OcrScenario.partial;
-  bool offline = false;
-  bool syncing = false;
-  bool emptyAccount = false;
+  bool ready = false;
+  DataState data = makeSeed();
+  Settings settings = const Settings();
+  String? userId;
+  String? token;
+  String? selectedPatientId;
 
-  // Data
-  String activePatientId = 'sokha';
-  late DateTime lastSync;
-  late String inviteCode;
-  late DateTime inviteExpires;
-  List<LinkedPerson> links = <LinkedPerson>[];
-  final Map<String, List<Reading>> _readings = <String, List<Reading>>{};
-  List<Reading> _emptyBackup = <Reading>[];
+  /// Current bottom tab (not saved).
+  AppTab tab = AppTab.home;
 
-  Timer? _syncTimer;
-  int _seq = 0;
-  final Random _rng = Random();
+  Timer? _saveTimer;
+  I18n? _i18n;
+  bool _disposed = false;
 
-  void _load() {
-    final n = DateTime.now();
-    _readings
-      ..clear()
-      ..['sokha'] = MockData.sokhaReadings(n)
-      ..['kim'] = MockData.kimReadings(n);
-    links = MockData.links(n);
-    lastSync = n.subtract(const Duration(minutes: 3));
-    inviteCode = '482915';
-    inviteExpires = n.add(const Duration(hours: 23, minutes: 41, seconds: 8));
-    emptyAccount = false;
-    _emptyBackup = <Reading>[];
-    offline = false;
-    syncing = false;
-    activePatientId = 'sokha';
-    reminderOn = true;
-    reminderTime = const TimeOfDay(hour: 6, minute: 30);
-  }
+  // ---------- load & save ----------
 
-  /// Sign out (demo): reload the sample data, keep language + role.
-  void resetDemo() {
-    _syncTimer?.cancel();
-    _load();
-    notifyListeners();
-  }
-
-  // ---------- Derived values ----------
-
-  bool get isKm => lang == AppLang.km;
-
-  DateTime get today => MockData.dateOnly(DateTime.now());
-
-  PatientInfo get activePatient => MockData.patients.firstWhere((p) => p.id == activePatientId);
-
-  List<PatientInfo> get visiblePatients => role == Role.caretaker ? MockData.patients : const <PatientInfo>[MockData.sokha];
-
-  /// Who is using the phone, as an author id in the sample data.
-  String get currentUserId {
-    switch (role) {
-      case Role.patient:
-        return 'self';
-      case Role.caretaker:
-        return 'mey';
-      case Role.family:
-        return 'family';
-    }
-  }
-
-  bool get canRecord => role != Role.family;
-
-  List<Reading> readingsOf(String patientId) {
-    final l = List<Reading>.of(_readings[patientId] ?? const <Reading>[]);
-    l.sort((a, b) => b.time.compareTo(a.time));
-    return l;
-  }
-
-  /// Newest first.
-  List<Reading> get readings => readingsOf(activePatientId);
-
-  Reading? get latest {
-    final r = readings;
-    return r.isEmpty ? null : r.first;
-  }
-
-  Reading? todayReadingOf(String patientId) {
-    final t = today;
-    for (final r in readingsOf(patientId)) {
-      if (MockData.dateOnly(r.time) == t) return r;
-    }
-    return null;
-  }
-
-  Reading? get todayReading => todayReadingOf(activePatientId);
-
-  bool recordedToday(String patientId) => todayReadingOf(patientId) != null;
-
-  DoctorNote? get doctorNote => MockData.noteFor(activePatientId, DateTime.now());
-
-  int get pendingCount => _readings.values.expand((l) => l).where((r) => r.pendingSync).length;
-
-  bool canEdit(Reading r) => role != Role.family && r.authorId == currentUserId;
-
-  String newId() => 'new-${DateTime.now().microsecondsSinceEpoch}-${_seq++}';
-
-  // ---------- Readings ----------
-
-  void addReading(Reading r, {bool replaceToday = false}) {
-    final list = _readings.putIfAbsent(r.patientId, () => <Reading>[]);
-    if (replaceToday) {
-      final t = today;
-      list.removeWhere((x) => MockData.dateOnly(x.time) == t);
-    }
-    list.add(offline ? r.copyWith(pendingSync: true) : r);
-    if (!offline) lastSync = DateTime.now();
-    notifyListeners();
-  }
-
-  void updateReading(Reading r) {
-    final list = _readings[r.patientId];
-    if (list == null) return;
-    final i = list.indexWhere((x) => x.id == r.id);
-    if (i < 0) return;
-    list[i] = offline ? r.copyWith(pendingSync: true) : r;
-    if (!offline) lastSync = DateTime.now();
-    notifyListeners();
-  }
-
-  void deleteReading(Reading r) {
-    _readings[r.patientId]?.removeWhere((x) => x.id == r.id);
-    notifyListeners();
-  }
-
-  // ---------- Settings ----------
-
-  void setLang(AppLang v) {
-    lang = v;
-    notifyListeners();
-  }
-
-  void setKhmerDigits(bool v) {
-    khmerDigits = v;
-    notifyListeners();
-  }
-
-  void setReminderOn(bool v) {
-    reminderOn = v;
-    notifyListeners();
-  }
-
-  void setReminderTime(TimeOfDay t) {
-    reminderTime = t;
-    notifyListeners();
-  }
-
-  void selectPatient(String id) {
-    activePatientId = id;
-    notifyListeners();
-  }
-
-  // ---------- Links ----------
-
-  void removeLink(String id) {
-    links = links.where((p) => p.id != id).toList();
-    notifyListeners();
-  }
-
-  void newInviteCode() {
-    inviteCode = (100000 + _rng.nextInt(900000)).toString();
-    inviteExpires = DateTime.now().add(const Duration(hours: 24));
-    notifyListeners();
-  }
-
-  // ---------- Demo controls ----------
-
-  void setRole(Role v) {
-    role = v;
-    activePatientId = 'sokha';
-    notifyListeners();
-  }
-
-  void setScenario(OcrScenario v) {
-    ocrScenario = v;
-    notifyListeners();
-  }
-
-  void setOffline(bool v) {
-    if (offline == v) return;
-    offline = v;
-    _syncTimer?.cancel();
-    syncing = false;
-    if (!v && pendingCount > 0) {
-      syncing = true;
-      _syncTimer = Timer(const Duration(milliseconds: 1600), () {
-        for (final key in _readings.keys.toList()) {
-          _readings[key] = _readings[key]!.map((r) => r.pendingSync ? r.copyWith(pendingSync: false) : r).toList();
+  Future<void> load() async {
+    if (_persist) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_storageKey);
+        if (raw != null) {
+          final saved = jsonDecode(raw) as Map<String, dynamic>;
+          final savedData = saved['data'] as Map<String, dynamic>?;
+          final dataOk = savedData?['version'] == seedVersion;
+          if (dataOk) {
+            data = DataState.fromJson(savedData!);
+            userId = saved['userId'] as String?;
+            token = saved['token'] as String?;
+            selectedPatientId = saved['selectedPatientId'] as String?;
+          }
+          settings = Settings.fromJson(saved['settings'] as Map<String, dynamic>? ?? {});
         }
-        syncing = false;
-        lastSync = DateTime.now();
-        notifyListeners();
-      });
-    }
-    notifyListeners();
-  }
-
-  void setRecordedToday(bool v) {
-    final id = activePatientId;
-    if (v) {
-      if (!recordedToday(id)) {
-        addReading(MockData.todayDemo(DateTime.now(), id, role == Role.caretaker ? 'mey' : 'self'));
+      } catch (_) {
+        // corrupted storage → start from demo data
       }
-    } else {
-      final t = today;
-      _readings[id]?.removeWhere((x) => MockData.dateOnly(x.time) == t);
-      notifyListeners();
     }
+    ready = true;
+    notifyListeners();
   }
 
-  void setEmptyAccount(bool v) {
-    if (emptyAccount == v) return;
-    emptyAccount = v;
-    if (v) {
-      _emptyBackup = _readings['sokha'] ?? <Reading>[];
-      _readings['sokha'] = <Reading>[];
-    } else {
-      _readings['sokha'] = <Reading>[..._emptyBackup, ...?_readings['sokha']];
-      _emptyBackup = <Reading>[];
-    }
+  void _changed() {
     notifyListeners();
+    if (!_persist) return;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _storageKey,
+          jsonEncode({
+            'data': data.toJson(),
+            'settings': settings.toJson(),
+            'userId': userId,
+            'token': token,
+            'selectedPatientId': selectedPatientId,
+          }),
+        );
+      } catch (_) {
+        // saving is best effort in this demo
+      }
+    });
   }
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
+    _disposed = true;
+    _saveTimer?.cancel();
     super.dispose();
+  }
+
+  // ---------- derived ----------
+
+  I18n get i18n {
+    final cached = _i18n;
+    if (cached != null && cached.lang == settings.lang && cached.numerals == settings.numerals) return cached;
+    return _i18n = I18n(settings.lang, settings.numerals);
+  }
+
+  AppUser? userById(String? id) {
+    for (final u in data.users) {
+      if (u.id == id) return u;
+    }
+    return null;
+  }
+
+  AppUser? get user => userById(userId);
+
+  /// Patients this user may see (themselves for a patient).
+  List<AppUser> get patients {
+    final u = user;
+    if (u == null) return const [];
+    if (u.role == Role.patient) return [u];
+    final ids = {
+      for (final l in data.links)
+        if (l.userId == u.id && l.status == LinkStatus.active) l.patientId,
+    };
+    return data.users.where((x) => ids.contains(x.id)).toList();
+  }
+
+  /// Patient currently shown in History / Reports / Record.
+  AppUser? get patient {
+    final ps = patients;
+    if (ps.isEmpty) return null;
+    return ps.firstWhere((p) => p.id == selectedPatientId, orElse: () => ps.first);
+  }
+
+  bool canView(String patientId) => patients.any((p) => p.id == patientId);
+
+  bool canRecord(String patientId) {
+    final u = user;
+    if (u == null) return false;
+    if (u.role == Role.patient) return u.id == patientId;
+    return u.role == Role.caretaker && canView(patientId);
+  }
+
+  /// A patient can edit any of their own readings; a caretaker only the ones they entered.
+  bool canEditReading(Reading r) {
+    final u = user;
+    if (u == null) return false;
+    if (u.role == Role.patient) return r.patientId == u.id;
+    if (u.role == Role.caretaker) return r.enteredBy == u.id && canView(r.patientId);
+    return false;
+  }
+
+  /// Newest first.
+  List<Reading> readingsOf(String patientId) {
+    if (!canView(patientId)) return const [];
+    return data.readings.where((r) => r.patientId == patientId).toList()
+      ..sort((a, b) => b.takenAt.compareTo(a.takenAt));
+  }
+
+  Reading? todayReadingOf(String patientId) {
+    final now = DateTime.now();
+    for (final r in readingsOf(patientId)) {
+      if (isSameDay(r.takenAt, now)) return r;
+    }
+    return null;
+  }
+
+  Reading? readingById(String id) {
+    for (final r in data.readings) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  List<AppTab> get visibleTabs {
+    final r = user?.role;
+    final canRecordRole = r == Role.patient || r == Role.caretaker;
+    return [for (final t in AppTab.values) if (t != AppTab.record || canRecordRole) t];
+  }
+
+  // ---------- actions ----------
+
+  void signIn(String id) {
+    userId = id;
+    token = null;
+    selectedPatientId = null;
+    tab = AppTab.home;
+    _changed();
+    final target = userById(id);
+    if (_enableLiveApi && target != null) {
+      unawaited(_fetchDevToken(id, target.role));
+    }
+  }
+
+  Future<void> _fetchDevToken(String id, Role role) async {
+    try {
+      final res = await api.devLogin(role);
+      if (_disposed || userId != id) return;
+      token = res.token;
+      _changed();
+    } catch (_) {
+      // API not running — standalone demo mode continues without a token.
+    }
+  }
+
+  void signOut() {
+    userId = null;
+    token = null;
+    selectedPatientId = null;
+    _changed();
+  }
+
+  void selectPatient(String id) {
+    selectedPatientId = id;
+    _changed();
+  }
+
+  void setTab(AppTab t) {
+    if (tab == t) return;
+    tab = t;
+    notifyListeners();
+  }
+
+  void setSettings(Settings s) {
+    settings = s;
+    _changed();
+  }
+
+  void saveReading(Reading reading, {String? replaceId}) {
+    data = data.copyWith(readings: [
+      for (final r in data.readings)
+        if (r.id != reading.id && r.id != replaceId) r,
+      reading,
+    ]);
+    _changed();
+  }
+
+  /// Returns the removed reading so it can be restored (Undo).
+  Reading? deleteReading(String id) {
+    final r = readingById(id);
+    data = data.copyWith(readings: data.readings.where((x) => x.id != id).toList());
+    _changed();
+    return r;
+  }
+
+  void restoreReading(Reading r) => saveReading(r);
+
+  void addNote(String patientId, String text) {
+    final u = user;
+    if (u == null) return;
+    data = data.copyWith(notes: [
+      ...data.notes,
+      DoctorNote(id: newId('n'), patientId: patientId, authorId: u.id, text: text, createdAt: DateTime.now()),
+    ]);
+    _changed();
+  }
+
+  void addLink(String patientId, String userId, LinkRelation relation,
+      {required bool initiatedByPatient, required LinkStatus status}) {
+    data = data.copyWith(links: [
+      ...data.links,
+      Link(
+        id: newId('l'),
+        patientId: patientId,
+        userId: userId,
+        relation: relation,
+        status: status,
+        initiatedByPatient: initiatedByPatient,
+        createdAt: DateTime.now(),
+      ),
+    ]);
+    _changed();
+  }
+
+  void approveLink(String id) {
+    data = data.copyWith(links: [for (final l in data.links) l.id == id ? l.copyWith(status: LinkStatus.active) : l]);
+    _changed();
+  }
+
+  void removeLink(String id) {
+    data = data.copyWith(links: data.links.where((l) => l.id != id).toList());
+    _changed();
+  }
+
+  void resetData() {
+    data = makeSeed();
+    selectedPatientId = null;
+    _changed();
   }
 }
 
-/// Makes AppState available to every widget below it.
 class AppScope extends InheritedNotifier<AppState> {
   const AppScope({super.key, required AppState state, required super.child}) : super(notifier: state);
 
-  /// Read and rebuild when the state changes.
+  /// Watches the state: the caller rebuilds on every change.
   static AppState of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
 
-  /// Read once, without rebuilding (use inside callbacks).
+  /// Reads the state once, for callbacks.
   static AppState read(BuildContext context) => context.getInheritedWidgetOfExactType<AppScope>()!.notifier!;
 }

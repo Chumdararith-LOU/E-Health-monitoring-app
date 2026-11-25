@@ -1,0 +1,22 @@
+info:
+  name: create reading
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/patients/{{patientId}}/readings"
+  body:
+    type: json
+    data: |-
+      {
+        "method": "manual",
+        "note": "Morning reading via Bruno",
+        "values": {
+          "systolic": 124,
+          "diastolic": 78,
+          "pulse": 72,
+          "glucose": 102
+        }
+      }
+  auth: inherit
