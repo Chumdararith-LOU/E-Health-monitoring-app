@@ -1,0 +1,2 @@
+Material Design Icons by Pictogrammers (https://pictogrammers.com/library/mdi/).
+Icons: Apache License 2.0. Font: SIL Open Font License 1.1.
