@@ -274,6 +274,7 @@ const Map<String, String> en = {
   'numeralsKhmer': 'Khmer ១២៣',
   'numeralsWestern': 'Western 123',
   'textSize': 'Text size',
+  'textSmall': 'Small',
   'textNormal': 'Normal',
   'textLarge': 'Large',
   'textXL': 'Extra large',

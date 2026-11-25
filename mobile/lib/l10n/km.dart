@@ -259,6 +259,7 @@ const Map<String, String> km = {
   'numeralsKhmer': 'ខ្មែរ ១២៣',
   'numeralsWestern': 'អារ៉ាប់ 123',
   'textSize': 'ទំហំអក្សរ',
+  'textSmall': 'តូច',
   'textNormal': 'ធម្មតា',
   'textLarge': 'ធំ',
   'textXL': 'ធំណាស់',
