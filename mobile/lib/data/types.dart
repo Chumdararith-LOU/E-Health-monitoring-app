@@ -336,12 +336,18 @@ class DataState {
   final List<CustomField> fields;
   final List<DoctorNote> notes;
 
-  DataState copyWith({List<Link>? links, List<Reading>? readings, List<DoctorNote>? notes}) => DataState(
+  DataState copyWith({
+    List<Link>? links,
+    List<Reading>? readings,
+    List<CustomField>? fields,
+    List<DoctorNote>? notes,
+  }) =>
+      DataState(
         version: version,
         users: users,
         links: links ?? this.links,
         readings: readings ?? this.readings,
-        fields: fields,
+        fields: fields ?? this.fields,
         notes: notes ?? this.notes,
       );
 

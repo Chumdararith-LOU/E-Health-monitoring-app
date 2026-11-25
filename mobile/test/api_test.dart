@@ -313,4 +313,65 @@ void main() {
     expect(find.text('Record now'), findsNothing);
     expect(state.visibleTabs.contains(AppTab.record), isFalse);
   });
+
+  test('AppState.saveReading and deleteReading sync CRUD calls to ApiClient and reconcile server ID', () async {
+    final log = <String>[];
+    final api = ApiClient(
+      baseUrl: 'http://example.test/api/v1',
+      transport: (method, uri, headers, body) async {
+        log.add('$method ${uri.path}');
+        if (method == 'POST' && uri.path.endsWith('/readings')) {
+          return ApiHttpResponse(
+            statusCode: 201,
+            body: jsonEncode({
+              'id': 'server-uuid-42',
+              'patientId': 'p1',
+              'enteredBy': 'p1',
+              'measuredAt': '2026-11-25T00:30:00.000Z',
+              'method': 'manual',
+              'note': 'Saved live',
+              'photoUri': null,
+              'values': {'systolic': 122, 'diastolic': 78, 'glucose': 100},
+              'createdAt': '2026-11-25T00:30:00.000Z',
+              'updatedAt': null,
+            }),
+          );
+        }
+        if (method == 'DELETE') {
+          return const ApiHttpResponse(statusCode: 204, body: '');
+        }
+        return ApiHttpResponse(statusCode: 200, body: jsonEncode({'fields': [], 'readings': []}));
+      },
+    );
+
+    final st = AppState(persist: false, api: api);
+    st.userId = 'p1';
+    st.token = 'jwt-p1';
+
+    final draft = Reading(
+      id: 'local-temp-1',
+      patientId: 'p1',
+      takenAt: DateTime.parse('2026-11-25T00:30:00.000Z'),
+      systolic: 122,
+      diastolic: 78,
+      glucose: 100,
+      enteredBy: 'p1',
+      method: EntryMethod.manual,
+      note: 'Saved live',
+    );
+
+    st.saveReading(draft);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(st.readingById('local-temp-1'), isNull);
+    expect(st.readingById('server-uuid-42')?.systolic, 122);
+
+    st.deleteReading('server-uuid-42');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(log, [
+      'POST /api/v1/patients/p1/readings',
+      'DELETE /api/v1/patients/p1/readings/server-uuid-42',
+    ]);
+  });
 }

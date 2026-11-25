@@ -208,4 +208,114 @@ class ApiClient {
       series: {for (final s in seriesList) s.fieldKey: s},
     );
   }
+
+  /// `GET /fields` — returns active non-built-in custom fields for forms and reports.
+  Future<List<CustomField>> listCustomFields({required String token}) async {
+    final json = await requestJson('GET', '/fields', token: token);
+    final raw = json['fields'] as List<dynamic>? ?? const [];
+    return [
+      for (final item in raw.cast<Map<String, dynamic>>())
+        if (item['builtIn'] != true) customFieldFromApiJson(item),
+    ];
+  }
+
+  /// `GET /patients/:patientId/readings`
+  Future<List<Reading>> listPatientReadings(
+    String patientId, {
+    required String token,
+    int limit = 200,
+  }) async {
+    final encodedId = Uri.encodeComponent(patientId);
+    final json = await requestJson('GET', '/patients/$encodedId/readings?limit=$limit', token: token);
+    final raw = json['readings'] as List<dynamic>? ?? const [];
+    return [for (final item in raw.cast<Map<String, dynamic>>()) readingFromApiJson(item)];
+  }
+
+  /// `POST /patients/:patientId/readings`
+  Future<Reading> createReading(Reading reading, {required String token}) async {
+    final encodedId = Uri.encodeComponent(reading.patientId);
+    final json = await requestJson(
+      'POST',
+      '/patients/$encodedId/readings',
+      token: token,
+      body: {
+        'measuredAt': reading.takenAt.toUtc().toIso8601String(),
+        'method': reading.method.name,
+        'note': reading.note,
+        'photoUri': reading.photoUri,
+        'values': readingToValues(reading),
+      },
+    );
+    return readingFromApiJson(json);
+  }
+
+  /// `PUT /patients/:patientId/readings/:readingId`
+  Future<Reading> updateReading(Reading reading, {required String token}) async {
+    final encodedPid = Uri.encodeComponent(reading.patientId);
+    final encodedRid = Uri.encodeComponent(reading.id);
+    final json = await requestJson(
+      'PUT',
+      '/patients/$encodedPid/readings/$encodedRid',
+      token: token,
+      body: {
+        'measuredAt': reading.takenAt.toUtc().toIso8601String(),
+        'note': reading.note,
+        'values': readingToValues(reading),
+      },
+    );
+    return readingFromApiJson(json);
+  }
+
+  /// `DELETE /patients/:patientId/readings/:readingId`
+  Future<void> deleteReading(String patientId, String readingId, {required String token}) async {
+    final encodedPid = Uri.encodeComponent(patientId);
+    final encodedRid = Uri.encodeComponent(readingId);
+    await requestJson('DELETE', '/patients/$encodedPid/readings/$encodedRid', token: token);
+  }
 }
+
+/// Converts a mobile [Reading] into the API `values` map (`{ systolic, diastolic, ... }`).
+Map<String, double> readingToValues(Reading r) => {
+      if (r.systolic != null) 'systolic': r.systolic!,
+      if (r.diastolic != null) 'diastolic': r.diastolic!,
+      if (r.pulse != null) 'pulse': r.pulse!,
+      if (r.glucose != null) 'glucose': r.glucose!,
+      ...r.extra,
+    };
+
+/// Parses a `ReadingDto` JSON object from the API into a mobile [Reading].
+Reading readingFromApiJson(Map<String, dynamic> j) {
+  final rawVals = (j['values'] as Map<String, dynamic>? ?? const {});
+  double? val(String k) => (rawVals[k] as num?)?.toDouble();
+  final extra = <String, double>{
+    for (final e in rawVals.entries)
+      if (e.key != 'systolic' && e.key != 'diastolic' && e.key != 'pulse' && e.key != 'glucose')
+        e.key: (e.value as num).toDouble(),
+  };
+  return Reading(
+    id: j['id'] as String,
+    patientId: j['patientId'] as String,
+    takenAt: DateTime.parse(j['measuredAt'] as String).toLocal(),
+    systolic: val('systolic'),
+    diastolic: val('diastolic'),
+    pulse: val('pulse'),
+    glucose: val('glucose'),
+    extra: extra,
+    enteredBy: j['enteredBy'] as String,
+    method: EntryMethod.values.firstWhere((m) => m.name == j['method'], orElse: () => EntryMethod.manual),
+    note: j['note'] as String?,
+    photoUri: j['photoUri'] as String?,
+    updatedAt: j['updatedAt'] == null ? null : DateTime.parse(j['updatedAt'] as String).toLocal(),
+  );
+}
+
+/// Parses a `CustomFieldDto` JSON object from the API into a mobile [CustomField].
+CustomField customFieldFromApiJson(Map<String, dynamic> j) => CustomField(
+      id: j['id'] as String,
+      nameEn: j['nameEn'] as String,
+      nameKm: j['nameKm'] as String,
+      unit: j['unit'] as String,
+      decimals: (j['decimals'] as num).toInt(),
+      min: (j['minValue'] as num).toDouble(),
+      max: (j['maxValue'] as num).toDouble(),
+    );

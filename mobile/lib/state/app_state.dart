@@ -217,8 +217,37 @@ class AppState extends ChangeNotifier {
       if (_disposed || userId != id) return;
       token = res.token;
       _changed();
+      unawaited(_hydrateFromApi(id, res.token));
     } catch (_) {
       // API not running — standalone demo mode continues without a token.
+    }
+  }
+
+  Future<void> _hydrateFromApi(String expectedUserId, String activeToken) async {
+    try {
+      final fields = await api.listCustomFields(token: activeToken);
+      if (_disposed || userId != expectedUserId) return;
+      data = data.copyWith(fields: fields);
+      _changed();
+    } catch (_) {
+      // Keep local demo fields if offline.
+    }
+
+    for (final p in patients) {
+      try {
+        final live = await api.listPatientReadings(p.id, token: activeToken);
+        if (_disposed || userId != expectedUserId) return;
+        if (live.isNotEmpty) {
+          data = data.copyWith(readings: [
+            for (final r in data.readings)
+              if (r.patientId != p.id) r,
+            ...live,
+          ]);
+          _changed();
+        }
+      } catch (_) {
+        // Keep local demo readings for unlinked/offline patients.
+      }
     }
   }
 
@@ -246,12 +275,43 @@ class AppState extends ChangeNotifier {
   }
 
   void saveReading(Reading reading, {String? replaceId}) {
+    final existed = data.readings.any((r) => r.id == reading.id);
     data = data.copyWith(readings: [
       for (final r in data.readings)
         if (r.id != reading.id && r.id != replaceId) r,
       reading,
     ]);
     _changed();
+
+    final activeToken = token;
+    if (_enableLiveApi && activeToken != null) {
+      unawaited(_syncSaveReading(reading, existed: existed, replaceId: replaceId, activeToken: activeToken));
+    }
+  }
+
+  Future<void> _syncSaveReading(
+    Reading reading, {
+    required bool existed,
+    required String? replaceId,
+    required String activeToken,
+  }) async {
+    try {
+      if (replaceId != null) {
+        await api.deleteReading(reading.patientId, replaceId, token: activeToken);
+      }
+      final saved = existed
+          ? await api.updateReading(reading, token: activeToken)
+          : await api.createReading(reading, token: activeToken);
+      if (_disposed || token != activeToken) return;
+      data = data.copyWith(readings: [
+        for (final r in data.readings)
+          if (r.id != reading.id && r.id != saved.id) r,
+        saved,
+      ]);
+      _changed();
+    } catch (_) {
+      // Offline or unlinked → optimistic reading remains stored locally on phone.
+    }
   }
 
   /// Returns the removed reading so it can be restored (Undo).
@@ -259,6 +319,10 @@ class AppState extends ChangeNotifier {
     final r = readingById(id);
     data = data.copyWith(readings: data.readings.where((x) => x.id != id).toList());
     _changed();
+    final activeToken = token;
+    if (_enableLiveApi && activeToken != null && r != null) {
+      unawaited(api.deleteReading(r.patientId, r.id, token: activeToken).catchError((Object _) {}));
+    }
     return r;
   }
 
