@@ -29,7 +29,7 @@ Keep this file at the root of the repository (or in `docs/`) and update it every
 
 - [ ] Kick-off: roles, repository, task board · 2026-11-26 to 2026-11-27 · LOU CHUMDARARITH, PHOLL CHANPHAYUK, SARITH SEYLA, SOPHEAP SOTHIPHAK
 - [ ] Requirements and user stories · 2026-11-30 to 2026-12-02 · LOU CHUMDARARITH
-- [ ] **Milestone: Proposal approved** · 2026-12-02
+- [x] **Milestone: Proposal approved** · 2026-12-02
 
 ## 2. Design (weeks 2–3, 2026-12-03 to 2026-12-09)
 
