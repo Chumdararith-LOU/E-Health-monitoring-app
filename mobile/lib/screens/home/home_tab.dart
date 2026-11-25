@@ -76,7 +76,7 @@ class HomeTab extends StatelessWidget {
           child: ListView(
             physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            children: gapped(cards, 14),
+            children: gapped(cards, Sp.s5),
           ),
         ),
       ],
@@ -91,36 +91,15 @@ class HomeTab extends StatelessWidget {
   Widget _notRecordedPanel(BuildContext context, L l, AppState st, PatientInfo p) {
     final other = st.role != Role.patient;
     return BoxedPanel(
-      accent: PanelAccent.warn,
-      leadingIcon: Icons.wb_sunny_outlined,
       title: _statusTitle(l, st, p),
-      trailing: st.role == Role.caretaker
-          ? null
-          : Text(l.dayY(st.today), style: T.cap.copyWith(fontWeight: FontWeight.w600)),
+      trailing: st.role == Role.caretaker ? null : Text(l.dayY(st.today), style: T.cap),
+      padding: const EdgeInsets.all(Sp.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: C.warnBg,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: C.warnDivider),
-                ),
-                child: const Icon(Icons.schedule_rounded, size: 22, color: C.warnText),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  other ? l.notRecordedName(p.firstName.of(l.km)) : l.notRecorded,
-                  style: T.big.copyWith(color: C.warnText),
-                ),
-              ),
-            ],
+          Text(
+            other ? l.notRecordedName(p.firstName.of(l.km)) : l.notRecorded,
+            style: T.big,
           ),
           if (st.canRecord) ...[
             const SizedBox(height: 16),
@@ -145,44 +124,29 @@ class HomeTab extends StatelessWidget {
   Widget _recordedPanel(BuildContext context, L l, AppState st, Reading r, PatientInfo p) {
     return BoxedPanel(
       accent: PanelAccent.ok,
-      leadingIcon: Icons.check_circle_outline_rounded,
       title: _statusTitle(l, st, p),
       trailing: r.pendingSync
           ? StatusBadge(label: l.pendingSync, tone: BadgeTone.warn, icon: Icons.schedule_rounded)
-          : (st.role == Role.caretaker
-              ? null
-              : Text(l.dayY(st.today), style: T.cap.copyWith(fontWeight: FontWeight.w600))),
+          : (st.role == Role.caretaker ? null : Text(l.dayY(st.today), style: T.cap)),
+      padding: const EdgeInsets.all(Sp.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: const BoxDecoration(color: C.okBorder, shape: BoxShape.circle),
-                child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 12),
+              const Icon(Icons.check_circle_rounded, color: C.okBorder, size: 22),
+              const SizedBox(width: Sp.s2),
               Expanded(
                 child: Text(
                   l.recordedAt(l.time(r.time)),
-                  style: T.big.copyWith(color: C.okText),
+                  style: T.bodyB.copyWith(color: C.okText),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: BoxDecoration(
-              color: C.panelHeader,
-              borderRadius: D.radius,
-              border: Border.all(color: C.divider),
-            ),
-            child: VitalRow(reading: r, big: true),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Sp.s4),
+          VitalRow(reading: r, big: true),
+          const SizedBox(height: Sp.s4),
           Row(
             children: [
               Expanded(child: Text(l.recordedBy(authorLabel(l, r, p)), style: T.cap)),
@@ -210,7 +174,7 @@ class HomeTab extends StatelessWidget {
 
   Widget _latestPanel(BuildContext context, L l, Reading r, PatientInfo p) {
     return BoxedPanel(
-      leadingIcon: Icons.monitor_heart_outlined,
+      open: true,
       title: l.latest,
       trailing: Text(l.dayTime(r.time), style: T.cap),
       footer: Row(
@@ -233,7 +197,6 @@ class HomeTab extends StatelessWidget {
   Widget _notePanel(L l, DoctorNote note) {
     return BoxedPanel(
       accent: PanelAccent.memo,
-      leadingIcon: Icons.medical_information_outlined,
       title: l.doctorNote,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,16 +225,9 @@ class HomeTab extends StatelessWidget {
     final start = DateTime(end.year, end.month, end.day - 6);
     final week = readings.where((r) => !r.time.isBefore(start)).toList();
     return BoxedPanel(
-      leadingIcon: Icons.show_chart_rounded,
+      open: true,
       title: l.trend7,
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: C.inputUnit,
-          borderRadius: D.radiusPill,
-        ),
-        child: Text('mmHg', style: T.capSm.copyWith(fontWeight: FontWeight.w600)),
-      ),
+      trailing: Text('mmHg', style: T.capSm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -293,7 +249,8 @@ class HomeTab extends StatelessWidget {
 
   Widget _emptyPanel(L l, String title) {
     return BoxedPanel(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+      open: true,
+      padding: const EdgeInsets.symmetric(vertical: Sp.s6),
       child: Column(
         children: [
           Container(
@@ -316,7 +273,7 @@ class HomeTab extends StatelessWidget {
 
   Widget _linkPanel(L l) {
     return BoxedPanel(
-      leadingIcon: Icons.link_rounded,
+      open: true,
       title: l.linkCareTitle,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

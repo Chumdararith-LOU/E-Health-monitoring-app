@@ -4,8 +4,12 @@ import '../theme/tokens.dart';
 
 enum PanelAccent { normal, warn, ok, memo }
 
-/// Modern elevated surface card with hairline border, soft icon badge,
-/// and smooth accent transitions. Preserves the exact BoxedPanel API.
+/// A page section: a plain heading on the canvas, then its content.
+///
+/// By default the content sits on a borderless white surface (for forms and
+/// lists). `open: true` drops the surface so the content sits straight on the
+/// page. `PanelAccent.memo` draws a quote with a left accent rule; `ok` and
+/// `warn` tint the surface. No header bands, icon tiles or nested borders.
 class BoxedPanel extends StatelessWidget {
   const BoxedPanel({
     super.key,
@@ -14,8 +18,9 @@ class BoxedPanel extends StatelessWidget {
     this.trailing,
     required this.child,
     this.accent = PanelAccent.normal,
-    this.padding = const EdgeInsets.all(16),
+    this.padding,
     this.footer,
+    this.open = false,
   });
 
   final String? title;
@@ -23,120 +28,100 @@ class BoxedPanel extends StatelessWidget {
   final Widget? trailing;
   final Widget child;
   final PanelAccent accent;
-  final EdgeInsetsGeometry padding;
+
+  /// Content padding. Defaults to 16 on a surface and none when open.
+  final EdgeInsetsGeometry? padding;
   final Widget? footer;
+  final bool open;
 
   @override
   Widget build(BuildContext context) {
-    Color bg = C.panel;
-    Color border = C.border;
-    double borderWidth = 1;
-    Color headerBg = Colors.transparent;
-    Color headerDivider = C.divider;
-    Color iconBg = C.navyTint;
-    Color iconColor = C.navyBase;
-    Color titleColor = C.text;
+    if (accent == PanelAccent.memo) return _memo();
 
-    switch (accent) {
-      case PanelAccent.warn:
-        bg = C.panel;
-        border = C.warnDivider;
-        borderWidth = 1.5;
-        headerBg = C.warnBg;
-        headerDivider = C.warnDivider;
-        iconBg = const Color(0xFFFEF3C7);
-        iconColor = C.warnText;
-        titleColor = C.warnText;
-        break;
-      case PanelAccent.ok:
-        bg = C.panel;
-        border = C.okDivider;
-        borderWidth = 1.5;
-        headerBg = C.okBg;
-        headerDivider = C.okDivider;
-        iconBg = const Color(0xFFDCFCE7);
-        iconColor = C.okText;
-        titleColor = C.okText;
-        break;
-      case PanelAccent.memo:
-        bg = C.memoBg;
-        border = C.memoBorder;
-        borderWidth = 1;
-        headerBg = Colors.transparent;
-        headerDivider = C.warnDivider;
-        iconBg = C.memoHeader;
-        iconColor = C.memoIcon;
-        titleColor = C.memoIcon;
-        break;
-      case PanelAccent.normal:
-        break;
+    final heading = title == null ? null : _heading(C.text, C.text2);
+
+    if (open) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (heading != null) ...[heading, const SizedBox(height: Sp.s2)],
+          Padding(padding: padding ?? EdgeInsets.zero, child: child),
+          if (footer != null) ...[const SizedBox(height: Sp.s3), footer!],
+        ],
+      );
     }
 
-    return AnimatedContainer(
-      duration: D.animMed,
-      curve: D.animCurve,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: D.radiusLg,
-        border: Border.all(color: border, width: borderWidth),
-        boxShadow: D.panelShadow,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (title != null)
-              AnimatedContainer(
-                duration: D.animMed,
-                curve: D.animCurve,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                decoration: BoxDecoration(
-                  color: headerBg,
-                  border: Border(bottom: BorderSide(color: headerDivider)),
+    final bg = switch (accent) {
+      PanelAccent.ok => C.okBg,
+      PanelAccent.warn => C.warnBg,
+      _ => C.panel,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (heading != null) ...[heading, const SizedBox(height: Sp.s2)],
+        AnimatedContainer(
+          duration: D.animMed,
+          curve: D.animCurve,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(color: bg, borderRadius: D.radiusLg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(padding: padding ?? const EdgeInsets.all(Sp.s4), child: child),
+              if (footer != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.s4, vertical: Sp.s3),
+                  decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: C.divider)),
+                  ),
+                  child: footer,
                 ),
-                child: Row(
-                  children: [
-                    if (leadingIcon != null) ...[
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: iconBg,
-                          borderRadius: D.radiusSm,
-                        ),
-                        child: Icon(leadingIcon, size: 18, color: iconColor),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          title!,
-                          style: T.h.copyWith(color: titleColor),
-                        ),
-                      ),
-                    ),
-                    if (trailing != null) ...[
-                      const SizedBox(width: 8),
-                      trailing!,
-                    ],
-                  ],
-                ),
-              ),
-            Padding(padding: padding, child: child),
-            if (footer != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                decoration: const BoxDecoration(
-                  color: C.footer,
-                  border: Border(top: BorderSide(color: C.divider)),
-                ),
-                child: footer,
-              ),
-          ],
+            ],
+          ),
         ),
+      ],
+    );
+  }
+
+  Widget _heading(Color fg, Color iconColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.s1),
+      child: Row(
+        children: [
+          if (leadingIcon != null) ...[
+            Icon(leadingIcon, size: 18, color: iconColor),
+            const SizedBox(width: Sp.s2),
+          ],
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(title!, style: T.h.copyWith(color: fg)),
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: Sp.s2),
+            trailing!,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _memo() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(Sp.s3, Sp.s1, 0, Sp.s1),
+      decoration: const BoxDecoration(
+        border: Border(left: BorderSide(color: C.memoBorder, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null) ...[_heading(C.memoIcon, C.memoIcon), const SizedBox(height: Sp.s1)],
+          Padding(padding: padding ?? const EdgeInsets.symmetric(horizontal: Sp.s1), child: child),
+          if (footer != null) ...[const SizedBox(height: Sp.s2), footer!],
+        ],
       ),
     );
   }

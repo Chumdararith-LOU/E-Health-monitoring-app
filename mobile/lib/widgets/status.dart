@@ -56,7 +56,6 @@ class StatusAlertBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: s.bg,
           borderRadius: D.radius,
-          border: Border.all(color: s.border.withValues(alpha: 0.35), width: 1.25),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,32 +107,26 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color bg = C.inputUnit;
-    Color border = C.borderStrong;
     Color fg = C.text2;
     switch (tone) {
       case BadgeTone.crit:
         bg = C.errBg;
-        border = C.errBorder;
         fg = C.errText;
         break;
       case BadgeTone.warn:
         bg = C.warnBg;
-        border = C.warnBorder;
         fg = C.warnText;
         break;
       case BadgeTone.ok:
         bg = C.okBg;
-        border = C.okBorder;
         fg = C.okText;
         break;
       case BadgeTone.info:
         bg = C.infoBg;
-        border = C.infoBorder;
         fg = C.infoText;
         break;
       case BadgeTone.gray:
         bg = C.inputUnit;
-        border = C.borderStrong;
         fg = C.text2;
         break;
     }
@@ -142,7 +135,6 @@ class StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        border: Border.all(color: border.withValues(alpha: 0.35)),
         borderRadius: D.radiusPill,
       ),
       // Text.rich (not Row + Flexible) so the badge works both in rows
