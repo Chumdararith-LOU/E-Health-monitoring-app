@@ -247,4 +247,9 @@ export const km: Strings = {
 
   notFound: 'រកមិនឃើញទំព័រ',
   goHome: 'ទៅទំព័រដើម',
+
+  retry: 'ព្យាយាមម្តងទៀត',
+  liveApiLoading: 'កំពុងផ្ទុកសង្ខេបពីម៉ាស៊ីនមេ…',
+  liveApiConnected: 'បានភ្ជាប់ម៉ាស៊ីនមេផ្ទាល់ ({fields} ប្រអប់ · ខកខាន {missed} ថ្ងៃ · ក្រៅកម្រិត {outOfRange})',
+  liveApiDemoFallback: 'បង្ហាញក្រាហ្វសាកល្បង រហូតដល់ម៉ូឌុលលទ្ធផលត្រូវបានភ្ជាប់។',
 };

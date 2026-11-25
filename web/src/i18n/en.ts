@@ -258,6 +258,12 @@ export const en = {
 
   notFound: 'Page not found',
   goHome: 'Go to start page',
+
+  // live API
+  retry: 'Retry',
+  liveApiLoading: 'Loading live summary…',
+  liveApiConnected: 'Live API connected ({fields} fields · {missed} missed days · {outOfRange} out of range)',
+  liveApiDemoFallback: 'Showing demo charts until the readings module is connected.',
 };
 
 export type Strings = typeof en;
