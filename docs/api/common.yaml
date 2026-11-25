@@ -54,3 +54,19 @@ responses:
           $ref: '#/schemas/ApiError'
         example:
           error: { code: forbidden, messageKey: errors.forbidden }
+  NotFound:
+    description: Record not found
+    content:
+      application/json:
+        schema:
+          $ref: '#/schemas/ApiError'
+        example:
+          error: { code: not_found, messageKey: errors.not_found }
+  Conflict:
+    description: Duplicate or conflicting state
+    content:
+      application/json:
+        schema:
+          $ref: '#/schemas/ApiError'
+        example:
+          error: { code: conflict, messageKey: errors.conflict }
