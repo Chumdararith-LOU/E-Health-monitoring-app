@@ -18,6 +18,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 export function createApp(db: () => Db = getDb) {
   const app = express();
   app.disable('x-powered-by');
+  app.locals.getDb = db;
   
   if (config.NODE_ENV === 'development') {
     app.use((req, res, next) => {

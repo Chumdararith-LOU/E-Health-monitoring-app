@@ -49,4 +49,35 @@ describe('module hooks', () => {
     expect(calls).toEqual(['a.startup', 'c.startup', 'a.seed', 'd.seed']);
     db.$client.close();
   });
+
+  it('migrations, startups, and seeds run cleanly and are safe to run twice', async () => {
+    const db = createDb(':memory:');
+    runMigrations(db);
+    await runStartups(db);
+    await runSeeds(db);
+
+    const counts = () =>
+      Object.fromEntries(
+        ['users', 'patient_links', 'invite_codes', 'doctor_notes', 'custom_fields', 'readings', 'reading_values', 'reminders'].map(
+          (table) => [
+            table,
+            (db.$client.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+          ],
+        ),
+      );
+
+    const first = counts();
+    expect(first.users).toBeGreaterThanOrEqual(18);
+    expect(first.patient_links).toBeGreaterThanOrEqual(15);
+    expect(first.custom_fields).toBe(5);
+    expect(first.readings).toBeGreaterThan(300);
+    expect(first.reading_values).toBeGreaterThan(1200);
+    expect(first.reminders).toBe(5);
+
+    // Running startups and seeds a second time must not duplicate rows or throw.
+    await runStartups(db);
+    await runSeeds(db);
+    expect(counts()).toEqual(first);
+    db.$client.close();
+  });
 });
