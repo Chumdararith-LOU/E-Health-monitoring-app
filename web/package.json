@@ -2,7 +2,7 @@
   "name": "@ehealth/web",
   "private": true,
   "version": "0.1.0",
-  "description": "E-Health Monitoring App — web portal for doctors and admins (hard-coded sample data, no backend yet).",
+  "description": "E-Health Monitoring App \u2014 web portal for doctors and admins (demo data saved in the browser, no backend yet).",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@ehealth/types": "workspace:*",
+    "@mdi/js": "^7.4.47",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.7"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

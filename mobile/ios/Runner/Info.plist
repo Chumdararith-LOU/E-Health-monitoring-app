@@ -64,5 +64,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>E-Health uses the camera to photograph your blood pressure monitor or glucose meter.</string>
 </dict>
 </plist>

@@ -4,21 +4,10 @@ import 'package:flutter/services.dart';
 import 'app.dart';
 import 'state/app_state.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Portrait only: the layout is designed for one-handed use.
-  SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
-
-  // Light status-bar icons over the navy header; dark icons on the white
-  // Android navigation bar.
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Color(0x00000000),
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: Color(0xFFFFFFFF),
-    systemNavigationBarIconBrightness: Brightness.dark,
-  ));
-
-  runApp(EHealthApp(state: AppState()));
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  final state = AppState();
+  runApp(EHealthApp(state: state));
+  await state.load();
 }
