@@ -5,13 +5,44 @@ import 'package:ehealth_mobile/data/stats.dart';
 import 'package:ehealth_mobile/data/types.dart';
 import 'package:ehealth_mobile/l10n/en.dart';
 import 'package:ehealth_mobile/l10n/km.dart';
+import 'package:ehealth_mobile/l10n/modules/accounts.dart';
+import 'package:ehealth_mobile/l10n/modules/ocr.dart';
+import 'package:ehealth_mobile/l10n/modules/readings.dart';
+import 'package:ehealth_mobile/l10n/modules/reports.dart';
+import 'package:ehealth_mobile/l10n/modules/shared.dart';
+import 'package:ehealth_mobile/l10n/strings.dart';
 import 'package:ehealth_mobile/state/app_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Khmer and English have the same string keys', () {
+  test('Khmer and English have the same string keys in every module without duplicates', () {
+    final modules = [
+      ('shared', sharedKm, sharedEn),
+      ('accounts', accountsKm, accountsEn),
+      ('readings', readingsKm, readingsEn),
+      ('ocr', ocrKm, ocrEn),
+      ('reports', reportsKm, reportsEn),
+    ];
+
+    final seen = <String, String>{};
+    for (final (name, modKm, modEn) in modules) {
+      expect(modKm.keys.toSet(), modEn.keys.toSet(), reason: '$name key mismatch');
+      for (final key in modKm.keys) {
+        expect(seen.containsKey(key), isFalse, reason: 'duplicate key "$key" in $name and ${seen[key]}');
+        seen[key] = name;
+        expect(modKm[key]!.trim(), isNotEmpty, reason: 'empty km value for $key');
+        expect(modEn[key]!.trim(), isNotEmpty, reason: 'empty en value for $key');
+      }
+    }
+
     expect(km.keys.toSet(), en.keys.toSet());
+    expect(seen.length, km.length);
+  });
+
+  test('Khmer numerals convert round-trip', () {
+    expect(toKhmerDigits('120/80'), '១២០/៨០');
+    expect(fromKhmerDigits('១២០/៨០'), '120/80');
   });
 
   test('seed random numbers match the JavaScript prototype', () {

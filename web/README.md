@@ -70,7 +70,7 @@ Tabs, period and filters are kept in the URL (`?tab=readings&p=90`), so Back, Re
 | `src/App.tsx`                                | Routes, role-based navigation, sidebar / phone bottom bar               | Rith (shared) |
 | `src/ui/Kit.tsx`, `Feedback.tsx`, `Icon.tsx` | Button, Field, Segmented, Chip, Tabs, Badge; dialog + toast; icons      | Rith (shared) |
 | `src/styles/app.css`                         | Design tokens, every component style, responsive and print layout       | Rith (shared) |
-| `src/i18n/`                                  | `km.ts` (default), `en.ts`, Khmer numerals and dates                    | Rith (shared) |
+| `src/i18n/`                                  | Per-module strings in `modules/{shared,accounts,readings,ocr,reports}.ts`, merged by `km.ts` & `en.ts` | Per module (shared: Rith) |
 | `src/store/AppStore.tsx`                     | Local store standing in for the API (`canView` on every read)           | Rith (shared) |
 | `src/data/`                                  | Demo seed, normal ranges, stats, validation (same rules as mobile)      | Shared        |
 | `src/lib/api.ts`                             | Shared HTTP client (`apiRequest`, `ApiClientError`, dev login, reports) | Rith (shared) |

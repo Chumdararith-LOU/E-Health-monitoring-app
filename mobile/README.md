@@ -86,7 +86,8 @@ lib/
   theme/tokens.dart                ALL colours, spacing, radii, type scale
   theme/icons.dart                 the Material Design Icons the app uses (font in assets/fonts)
   l10n/strings.dart                I18n: t(key), Khmer numerals and dates (NFR-01, NFR-02)
-  l10n/km.dart, en.dart            ALL text. Both files must have the same keys (a test checks it)
+  l10n/modules/*.dart              ALL text, split per module (shared, accounts, readings, ocr, reports)
+  l10n/km.dart, en.dart            Merged barrels (tests verify km/en parity and no duplicate keys)
   data/types.dart                  User, Link, Reading, CustomField, DoctorNote, Settings
   data/ranges.dart                 safe input limits (FR-06) + normal ranges for flags
   data/stats.dart                  min / max / average, missed days, doctor summary (FR-10, FR-12)
