@@ -27,8 +27,8 @@ Keep this file at the root of the repository (or in `docs/`) and update it every
 
 ## 1. Start (weeks 1–2, 2026-11-26 to 2026-12-02)
 
-- [x] Kick-off: roles, repository, task board · 2026-11-26 to 2026-11-27 · LOU CHUMDARARITH, PHOLL CHANPHAYUK, SARITH SEYLA, SOPHEAP SOTHIPHAK
-- [x] Requirements and user stories · 2026-11-30 to 2026-12-02 · LOU CHUMDARARITH
+- [ ] Kick-off: roles, repository, task board · 2026-11-26 to 2026-11-27 · LOU CHUMDARARITH, PHOLL CHANPHAYUK, SARITH SEYLA, SOPHEAP SOTHIPHAK
+- [ ] Requirements and user stories · 2026-11-30 to 2026-12-02 · LOU CHUMDARARITH
 - [ ] **Milestone: Proposal approved** · 2026-12-02
 
 ## 2. Design (weeks 2–3, 2026-12-03 to 2026-12-09)
@@ -90,5 +90,5 @@ Keep this file at the root of the repository (or in `docs/`) and update it every
 
 | Date | Change | Why |
 |---|---|---|
-| 2026-11-23 | First plan | |
-| 2026-11-19 | Generic sprint tasks renamed to the real features (US-01 to US-17); added Khmer / English set-up, OCR spike, Reports and Reminders and family view; demo deployment moved from Jan 26 to Feb 1 into Sprint 3, done by Jan 22 | Teacher's requirements and user stories: every member works in every sprint and the demo is ready before the Jan 25 deadline |
+| 2026-11-19 | First plan | |
+| 2026-11-23 | Generic sprint tasks renamed to the real features (US-01 to US-17); added Khmer / English set-up, OCR spike, Reports and Reminders and family view; demo deployment moved from Jan 26 to Feb 1 into Sprint 3, done by Jan 22 | Teacher's requirements and user stories: every member works in every sprint and the demo is ready before the Jan 25 deadline |
