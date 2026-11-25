@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+mobile
+api/data/*.db
+api/data/*.db-shm
+api/data/*.db-wal
+api/.env
+docs/api/dist
+*.log
+.DS_Store

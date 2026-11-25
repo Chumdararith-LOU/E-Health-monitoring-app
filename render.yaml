@@ -1,0 +1,27 @@
+# Render Blueprint — deploy API + Web + persistent SQLite disk with one click.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ehealth-monitoring-app
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/v1/health
+    disk:
+      name: ehealth-sqlite
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DB_FILE
+        value: /data/ehealth.db
+      - key: WEB_DIST_DIR
+        value: /app/web/dist
+      - key: SEED_DEMO
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
