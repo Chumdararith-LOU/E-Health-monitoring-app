@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PatientSummary } from '@ehealth/types';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { addDays, dayKey, startOfDay } from '../data/dates';
 import { isOutOfRange, MEASURE_ORDER, MEASURES, readingLevel } from '../data/ranges';
 import { customRange, daysWithReadings, inRange, lastNDays, Range, statOf } from '../data/stats';
 import { Reading } from '../data/types';
+import { ApiClientError, apiGetPatientSummary } from '../lib/api';
 import { newId, useApp } from '../store/AppStore';
 import { ChartSeries, LineChart } from '../ui/Charts';
 import { Modal, useFeedback } from '../ui/Feedback';
@@ -14,11 +16,12 @@ import { ReadingModal } from '../ui/ReadingModal';
 type Tab = 'overview' | 'readings' | 'notes';
 type P = '7' | '30' | '90' | 'custom';
 const PAGE = 15;
+const SHOW_DEV_BANNER = import.meta.env.VITE_HIDE_DEV !== '1';
 
 /** Patient report for the doctor (US-10, US-11, US-19, FR-17 via print). Admin may open it read-only for support. */
 export function PatientPage() {
   const { id = '' } = useParams();
-  const { i18n, user, userById, canView, readingsOf, state, dispatch } = useApp();
+  const { i18n, user, token, userById, canView, readingsOf, state, dispatch } = useApp();
   const { toast } = useFeedback();
   const { t } = i18n;
   const [params, setParams] = useSearchParams();
@@ -46,6 +49,41 @@ export function PatientPage() {
   }, [period, cFrom, cTo]);
   const inPeriod = useMemo(() => inRange(all, range), [all, range]);
   const asc = useMemo(() => inPeriod.slice().reverse(), [inPeriod]);
+
+  const allowed = Boolean(p && canView(id));
+  const apiDays = Math.min(365, Math.max(1, range.days));
+  const [apiSummary, setApiSummary] = useState<PatientSummary | null>(null);
+  const [apiError, setApiError] = useState<ApiClientError | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+
+  useEffect(() => {
+    if (!token || !allowed) {
+      setApiSummary(null);
+      setApiError(null);
+      setApiLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setApiLoading(true);
+    setApiError(null);
+    apiGetPatientSummary(id, apiDays, token, ctrl.signal)
+      .then((res) => {
+        setApiSummary(res);
+        setApiLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setApiSummary(null);
+        setApiError(
+          err instanceof ApiClientError
+            ? err
+            : new ApiClientError(0, 'unknown', 'errors.internal_error'),
+        );
+        setApiLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [token, allowed, id, apiDays, retryTick]);
 
   if (!p || !canView(id)) {
     return (
@@ -89,12 +127,36 @@ export function PatientPage() {
     })),
   ];
 
+  const liveFields =
+    apiSummary && apiSummary.fields.length > 0
+      ? new Map(apiSummary.fields.map((f) => [f.fieldKey, f]))
+      : null;
+
   const statRows = [
-    ...MEASURE_ORDER.map((k) => ({ key: k, label: t(`m_${k}`), unit: MEASURES[k].unit, dec: 0, s: statOf(inPeriod, (r) => r[k]) })),
-    ...fields.map((f) => ({ key: f.id, label: i18n.name(f), unit: f.unit, dec: f.decimals, s: statOf(inPeriod, (r) => r.extra?.[f.id]) })),
+    ...MEASURE_ORDER.map((k) => {
+      const live = liveFields?.get(k);
+      return {
+        key: k,
+        label: t(`m_${k}`),
+        unit: MEASURES[k].unit,
+        dec: 0,
+        s: live ? { min: live.min, max: live.max, avg: live.avg, count: live.count } : statOf(inPeriod, (r) => r[k]),
+      };
+    }),
+    ...fields.map((f) => {
+      const live = liveFields?.get(f.id);
+      return {
+        key: f.id,
+        label: i18n.name(f),
+        unit: f.unit,
+        dec: f.decimals,
+        s: live ? { min: live.min, max: live.max, avg: live.avg, count: live.count } : statOf(inPeriod, (r) => r.extra?.[f.id]),
+      };
+    }),
   ];
 
   const flagged = inPeriod.filter(isOutOfRange);
+  const outOfRangeTotal = liveFields && apiSummary ? apiSummary.outOfRangeCount : flagged.length;
   const list = onlyFlagged ? flagged : inPeriod;
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
   const pageRows = list.slice(page * PAGE, page * PAGE + PAGE);
@@ -203,11 +265,45 @@ export function PatientPage() {
       {tab === 'overview' ? (
         <div role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" className="stack" style={{ gap: 'var(--s5)' }}>
           {periodControl}
+          {apiError ? (
+            <div className="no-print">
+              <Banner kind="error" icon={apiError.status === 403 ? 'lock' : 'error'}>
+                <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
+                  <span>{i18n.apiError(apiError.messageKey)}</span>
+                  {apiError.status !== 403 ? (
+                    <Button small variant="secondary" onClick={() => setRetryTick((n) => n + 1)}>
+                      {t('retry')}
+                    </Button>
+                  ) : null}
+                </div>
+              </Banner>
+            </div>
+          ) : SHOW_DEV_BANNER && apiLoading ? (
+            <div className="no-print">
+              <Banner>{t('liveApiLoading')}</Banner>
+            </div>
+          ) : SHOW_DEV_BANNER && apiSummary ? (
+            <div className="no-print">
+              <Banner>
+                {t('liveApiConnected', {
+                  fields: apiSummary.fields.length,
+                  missed: apiSummary.missedDays,
+                  outOfRange: apiSummary.outOfRangeCount,
+                })}
+                {apiSummary.fields.length === 0 ? ` ${t('liveApiDemoFallback')}` : ''}
+              </Banner>
+            </div>
+          ) : null}
           <div className="grid-3">
             <Card>
               <div className="card-head">
                 <h2>{t('summary')}</h2>
-                <span className="small muted">{t('daysRecorded', { n: daysWithReadings(inPeriod), total: range.days })}</span>
+                <span className="small muted">
+                  {t('daysRecorded', {
+                    n: liveFields && apiSummary ? Math.max(0, apiDays - apiSummary.missedDays) : daysWithReadings(inPeriod),
+                    total: range.days,
+                  })}
+                </span>
               </div>
               <div className="table-wrap">
                 <table className="table stats">
@@ -235,9 +331,9 @@ export function PatientPage() {
                   </tbody>
                 </table>
               </div>
-              {flagged.length ? (
+              {outOfRangeTotal ? (
                 <Badge kind="high" icon="alert">
-                  {t('outOfRangeCount', { n: flagged.length })}
+                  {t('outOfRangeCount', { n: outOfRangeTotal })}
                 </Badge>
               ) : (
                 <StatusBadge level="normal" />
