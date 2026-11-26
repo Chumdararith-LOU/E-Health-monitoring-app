@@ -1,0 +1,325 @@
+# Accounts module (US-01, US-02): register, sign in, current user.
+register:
+  post:
+    tags: [accounts]
+    operationId: register
+    summary: Create an account and sign in (US-01)
+    description: |
+      Admins cannot be registered here. Give `nameEn`, `nameKm` or both; the missing one copies the other.
+      `website` is a honeypot: leave it out (or empty). Any text in it is rejected as a bot.
+      A verification code is emailed (or printed in the console when `MAIL_ENABLED=false`). The user can sign in before verifying.
+      Limited to 5 requests per minute per IP.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/schemas/RegisterInput'
+          example:
+            role: patient
+            nameKm: សុខ ចន្ថា
+            nameEn: Sok Chantha
+            email: chantha@example.com
+            phone: '012 345 678'
+            password: correct-horse-battery
+    responses:
+      '201':
+        description: Account created
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/AuthResponse'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '409':
+        description: Email or phone already used
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: email_taken, messageKey: errors.email_taken }
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+login:
+  post:
+    tags: [accounts]
+    operationId: login
+    summary: Sign in with email or phone and a password (US-01)
+    description: |
+      A wrong password and an unknown account give the same 401, so the answer never reveals which emails exist.
+      Limited to 10 requests per minute per IP.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/schemas/LoginInput'
+          example:
+            identifier: '023 900 100'
+            password: '123456'
+    responses:
+      '200':
+        description: Signed in
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/AuthResponse'
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '401':
+        description: Wrong email, phone or password
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: invalid_credentials, messageKey: errors.invalid_credentials }
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+me:
+  get:
+    tags: [accounts]
+    operationId: getMe
+    summary: The signed-in user (US-02)
+    responses:
+      '200':
+        description: The user behind the token
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/User'
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+
+verifyEmailSend:
+  post:
+    tags: [accounts]
+    operationId: sendVerificationCode
+    summary: Email a 6-digit verification code to the signed-in user (US-01)
+    description: |
+      Register already sends the first code. Use this to ask for a new one; a new code replaces the old one.
+      With `MAIL_ENABLED=false` the code is printed in the API console instead of being emailed.
+      One code per minute per user; 5 requests per minute per IP.
+    responses:
+      '204':
+        description: Code sent
+      '400':
+        description: The account has no email address
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: no_email, messageKey: errors.no_email }
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '409':
+        description: Email is already verified
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: already_verified, messageKey: errors.already_verified }
+      '429':
+        $ref: '#/responses/TooManyRequests'
+      '502':
+        description: The mail provider failed
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: mail_failed, messageKey: errors.mail_failed }
+
+verifyEmailConfirm:
+  post:
+    tags: [accounts]
+    operationId: confirmEmail
+    summary: Confirm the email with the 6-digit code (US-01)
+    description: |
+      The code lasts 15 minutes, works once, and is locked after 5 wrong tries (ask for a new one).
+      A wrong, expired, used or locked code all give the same `invalid_code`.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code]
+            properties:
+              code: { type: string, pattern: '^[0-9]{6}$' }
+          example: { code: '123456' }
+    responses:
+      '200':
+        description: Email verified; the updated user
+        content:
+          application/json:
+            schema:
+              $ref: '#/schemas/User'
+      '400':
+        description: Bad input or `invalid_code`
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: invalid_code, messageKey: errors.invalid_code }
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+passwordForgot:
+  post:
+    tags: [accounts]
+    operationId: forgotPassword
+    summary: Email a 6-digit password reset code
+    description: |
+      Always answers 204, whether or not the email has an account, so nobody can use it to find out who is registered.
+      With `MAIL_ENABLED=false` the code is printed in the API console. One code per minute per account; 5 requests per minute per IP.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email]
+            properties:
+              email: { type: string, format: email }
+    responses:
+      '204':
+        description: Done. If the account exists, a code was sent
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+passwordReset:
+  post:
+    tags: [accounts]
+    operationId: resetPassword
+    summary: Set a new password with the emailed code
+    description: |
+      The code lasts 15 minutes, works once, and is locked after 5 wrong tries. An unknown email and a wrong code give the same `invalid_code`.
+      A good code also marks the email as verified. The user then signs in with the new password; no token is returned.
+      Tokens issued before the reset stay valid until they expire (7 days).
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email, code, newPassword]
+            properties:
+              email: { type: string, format: email }
+              code: { type: string, pattern: '^[0-9]{6}$' }
+              newPassword: { type: string, minLength: 8, maxLength: 200 }
+    responses:
+      '204':
+        description: Password changed
+      '400':
+        description: Bad input or `invalid_code`
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: invalid_code, messageKey: errors.invalid_code }
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+passwordChange:
+  post:
+    tags: [accounts]
+    operationId: changePassword
+    summary: Change the password of the signed-in user
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [currentPassword, newPassword]
+            properties:
+              currentPassword: { type: string }
+              newPassword: { type: string, minLength: 8, maxLength: 200 }
+    responses:
+      '204':
+        description: Password changed
+      '400':
+        description: Bad input, or `invalid_password` when the current password is wrong
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: invalid_password, messageKey: errors.invalid_password }
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+responses:
+  TooManyRequests:
+    description: Too many requests from this IP, try again in a minute
+    content:
+      application/json:
+        schema:
+          $ref: './common.yaml#/schemas/ApiError'
+        example:
+          error: { code: too_many_requests, messageKey: errors.too_many_requests }
+
+schemas:
+  User:
+    type: object
+    required: [id, role, nameEn, nameKm, email, phone, emailVerified]
+    properties:
+      id: { type: string }
+      role:
+        $ref: './common.yaml#/schemas/Role'
+      nameEn: { type: string }
+      nameKm: { type: string }
+      email: { type: [string, 'null'] }
+      phone: { type: [string, 'null'] }
+      emailVerified: { type: boolean }
+  RegisterInput:
+    type: object
+    required: [role, email, password]
+    properties:
+      role:
+        type: string
+        enum: [patient, caretaker, family, doctor]
+      nameEn: { type: string, maxLength: 100 }
+      nameKm: { type: string, maxLength: 100 }
+      email: { type: string, format: email }
+      phone: { type: string, description: 8 to 16 digits; spaces and dashes are ignored }
+      password: { type: string, minLength: 8, maxLength: 200 }
+      website:
+        type: string
+        maxLength: 0
+        description: Honeypot. Must stay empty.
+  LoginInput:
+    type: object
+    required: [identifier, password]
+    properties:
+      identifier:
+        type: string
+        description: Email or phone number
+      password: { type: string }
+  AuthResponse:
+    type: object
+    required: [token, user]
+    properties:
+      token:
+        type: string
+        description: JWT, send as `Authorization Bearer`
+      user:
+        $ref: '#/schemas/User'

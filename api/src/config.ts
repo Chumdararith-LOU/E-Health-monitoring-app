@@ -22,10 +22,25 @@ const schema = z
     SEED_DEMO: z.stringbool().default(false),
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     WEB_DIST_DIR: z.string().min(1).optional(),
+    // Email (verification and password reset codes). When false, codes are printed in the console.
+    MAIL_ENABLED: z.stringbool().default(false),
+    RESEND_API_KEY: z.string().min(1).optional(),
+    MAIL_FROM: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.JWT_SECRET) {
       ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'required in production' });
+    }
+    if (env.MAIL_ENABLED) {
+      for (const name of ['RESEND_API_KEY', 'MAIL_FROM'] as const) {
+        if (!env[name]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message: 'required when MAIL_ENABLED=true',
+          });
+        }
+      }
     }
   })
   .transform((env) => ({

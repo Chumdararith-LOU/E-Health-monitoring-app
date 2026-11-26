@@ -3,10 +3,12 @@
 
 import type { Db } from '../../shared/db';
 import { devUsers } from '../../shared/dev/dev-users';
+import { hashPasswordSync } from './password';
 import { doctorNotes, inviteCodes, patientLinks, users } from './schema';
 
-// Placeholder hash for demo password "123456" until US-01 bcrypt sign-in is wired.
-const DEMO_PASSWORD_HASH = 'dev-demo-123456';
+// Every demo user signs in with the password "123456".
+// Databases seeded before this change keep the old placeholder hash: run db:reset.
+const DEMO_PASSWORD_HASH = hashPasswordSync('123456');
 
 const SEED_USERS: (typeof users.$inferInsert)[] = [
   // Fixed dev-login users (match api/src/shared/dev/dev-users.ts and Bruno requests)
@@ -188,7 +190,12 @@ const SEED_USERS: (typeof users.$inferInsert)[] = [
 const DEMO_PATIENT_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'] as const;
 
 export function seedAccounts(db: Db): void {
-  db.insert(users).values(SEED_USERS).onConflictDoNothing().run();
+  // Demo users count as verified, so the demo needs no email step.
+  const verifiedAt = new Date().toISOString();
+  db.insert(users)
+    .values(SEED_USERS.map((u) => ({ ...u, emailVerifiedAt: verifiedAt })))
+    .onConflictDoNothing()
+    .run();
 
   const links: (typeof patientLinks.$inferInsert)[] = [
     // Dev login users linked to dev patient
