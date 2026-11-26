@@ -7,8 +7,10 @@ import { type Request, Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, signToken } from '../../shared/auth';
 import { type Db, getDb } from '../../shared/db';
-import { conflict, unauthorized } from '../../shared/errors';
+import { badRequest, conflict, unauthorized } from '../../shared/errors';
 import { validate } from '../../shared/validate';
+import { consumeCode } from './codes';
+import { sendVerificationCode } from './email-verification';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password';
 import { rateLimit } from './rate-limit';
 import { users } from './schema';
@@ -28,6 +30,7 @@ function toUserDto(row: typeof users.$inferSelect): UserDto {
     nameKm: row.nameKm,
     email: row.email,
     phone: row.phone,
+    emailVerified: row.emailVerifiedAt !== null,
   };
 }
 
@@ -64,8 +67,17 @@ const loginBody = z.object({
   password: z.string().min(1).max(200),
 });
 
+const confirmBody = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/),
+});
+
 const registerLimit = rateLimit({ windowMs: 60_000, max: 5 });
 const loginLimit = rateLimit({ windowMs: 60_000, max: 10 });
+const sendCodeLimit = rateLimit({ windowMs: 60_000, max: 5 });
+const confirmLimit = rateLimit({ windowMs: 60_000, max: 10 });
 
 accountsRouter.post(
   '/auth/register',
@@ -91,6 +103,13 @@ accountsRouter.post(
       .values({ role: body.role, nameEn, nameKm, email: body.email, phone, passwordHash })
       .returning()
       .get();
+
+    // The account exists even if the email fails; the user can ask for a new code later.
+    try {
+      await sendVerificationCode(db, { id: row.id, email: body.email });
+    } catch (err) {
+      console.error('could not send the verification email', err);
+    }
     res.status(201).json(await toAuthResponse(row));
   },
 );
@@ -116,3 +135,38 @@ accountsRouter.get('/auth/me', requireAuth, (req, res) => {
   if (!row) throw unauthorized();
   res.json(toUserDto(row));
 });
+
+accountsRouter.post('/auth/verify-email/send', requireAuth, sendCodeLimit, async (req, res) => {
+  const db = dbOf(req);
+  const row = db.select().from(users).where(eq(users.id, req.user!.id)).get();
+  if (!row) throw unauthorized();
+  if (!row.email) throw badRequest('no_email', 'errors.no_email');
+  if (row.emailVerifiedAt) throw conflict('already_verified', 'errors.already_verified');
+
+  await sendVerificationCode(db, { id: row.id, email: row.email });
+  res.status(204).end();
+});
+
+accountsRouter.post(
+  '/auth/verify-email/confirm',
+  requireAuth,
+  confirmLimit,
+  validate({ body: confirmBody }),
+  (req, res) => {
+    const body: z.infer<typeof confirmBody> = req.body;
+    const db = dbOf(req);
+    const row = db.select().from(users).where(eq(users.id, req.user!.id)).get();
+    if (!row) throw unauthorized();
+
+    if (!consumeCode(db, row.id, 'verify_email', body.code)) {
+      throw badRequest('invalid_code', 'errors.invalid_code');
+    }
+    const updated = db
+      .update(users)
+      .set({ emailVerifiedAt: new Date().toISOString() })
+      .where(eq(users.id, row.id))
+      .returning()
+      .get();
+    res.json(toUserDto(updated));
+  },
+);

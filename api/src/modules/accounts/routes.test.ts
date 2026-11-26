@@ -1,11 +1,14 @@
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../app';
 import { verifyToken } from '../../shared/auth';
 import { createDb, type Db, runMigrations } from '../../shared/db';
 import { runSeeds, runStartups } from '../index';
+import { sentMail } from './mail';
 import { hashPassword, verifyPassword } from './password';
 import { resetRateLimits } from './rate-limit';
+import { authCodes, users } from './schema';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -185,5 +188,171 @@ describe('GET /auth/me', () => {
     expect(me.body).toEqual(login.body.user);
 
     expect((await request(app).get('/api/v1/auth/me')).status).toBe(401);
+  });
+});
+
+// ---- Email verification (US-01) ----
+
+const lastCodeFor = (email: string): string => {
+  const mail = [...sentMail].reverse().find((m) => m.to === email);
+  const code = mail?.text.match(/^\d{6}$/m)?.[0];
+  if (!code) throw new Error(`no code mailed to ${email}`);
+  return code;
+};
+
+// Pretend the last code was issued 2 minutes ago, so the 1-minute cooldown is over.
+const skipCooldown = () =>
+  db
+    .update(authCodes)
+    .set({ createdAt: new Date(Date.now() - 120_000).toISOString() })
+    .run();
+
+async function registerFresh(email: string) {
+  const res = await request(app)
+    .post('/api/v1/auth/register')
+    .send({ role: 'patient', nameEn: 'Verify Me', email, password: 'correct-horse' });
+  expect(res.status).toBe(201);
+  return { token: `Bearer ${res.body.token as string}`, user: res.body.user };
+}
+
+describe('email verification', () => {
+  it('seeded demo users are verified, new users are not', async () => {
+    const demo = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ identifier: '023 900 100', password: '123456' });
+    expect(demo.body.user.emailVerified).toBe(true);
+
+    const { user } = await registerFresh('new1@example.com');
+    expect(user.emailVerified).toBe(false);
+  });
+
+  it('register mails a bilingual 6-digit code, and confirm verifies the email', async () => {
+    const { token } = await registerFresh('new2@example.com');
+    const mail = [...sentMail].reverse().find((m) => m.to === 'new2@example.com');
+    expect(mail?.subject).toContain('Verify your email');
+    expect(mail?.text).toContain('កូដ');
+
+    const res = await request(app)
+      .post('/api/v1/auth/verify-email/confirm')
+      .set('Authorization', token)
+      .send({ code: lastCodeFor('new2@example.com') });
+    expect(res.status).toBe(200);
+    expect(res.body.emailVerified).toBe(true);
+
+    const me = await request(app).get('/api/v1/auth/me').set('Authorization', token);
+    expect(me.body.emailVerified).toBe(true);
+  });
+
+  it('only stores a hash of the code, and a code works once', async () => {
+    const { token } = await registerFresh('new3@example.com');
+    const code = lastCodeFor('new3@example.com');
+    const stored = db.select().from(authCodes).all();
+    expect(stored.some((row) => row.codeHash.includes(code))).toBe(false);
+
+    const send = () =>
+      request(app)
+        .post('/api/v1/auth/verify-email/confirm')
+        .set('Authorization', token)
+        .send({ code });
+    expect((await send()).status).toBe(200);
+    const again = await send();
+    expect(again.status).toBe(400);
+    expect(again.body.error.code).toBe('invalid_code');
+  });
+
+  it('rejects a wrong code, a badly formed code, and locks the code after 5 wrong tries', async () => {
+    const { token } = await registerFresh('new4@example.com');
+    const good = lastCodeFor('new4@example.com');
+    const wrong = good === '000000' ? '111111' : '000000';
+    const confirm = (code: string) =>
+      request(app)
+        .post('/api/v1/auth/verify-email/confirm')
+        .set('Authorization', token)
+        .send({ code });
+
+    expect((await confirm('12ab')).status).toBe(400);
+    for (let i = 0; i < 5; i++) {
+      const res = await confirm(wrong);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('invalid_code');
+    }
+    // locked: even the right code fails now
+    expect((await confirm(good)).status).toBe(400);
+
+    // a new code unlocks it
+    skipCooldown();
+    expect(
+      (await request(app).post('/api/v1/auth/verify-email/send').set('Authorization', token))
+        .status,
+    ).toBe(204);
+    expect((await confirm(lastCodeFor('new4@example.com'))).status).toBe(200);
+  });
+
+  it('rejects an expired code', async () => {
+    const { token } = await registerFresh('new5@example.com');
+    const code = lastCodeFor('new5@example.com');
+    db.update(authCodes)
+      .set({ expiresAt: new Date(Date.now() - 1000).toISOString() })
+      .run();
+    const res = await request(app)
+      .post('/api/v1/auth/verify-email/confirm')
+      .set('Authorization', token)
+      .send({ code });
+    expect(res.status).toBe(400);
+  });
+
+  it('send: needs a token, has a 1-minute cooldown, and a new code replaces the old one', async () => {
+    expect((await request(app).post('/api/v1/auth/verify-email/send')).status).toBe(401);
+
+    const { token } = await registerFresh('new6@example.com');
+    const first = lastCodeFor('new6@example.com');
+
+    const tooSoon = await request(app)
+      .post('/api/v1/auth/verify-email/send')
+      .set('Authorization', token);
+    expect(tooSoon.status).toBe(429);
+    expect(tooSoon.body.error.code).toBe('code_cooldown');
+
+    skipCooldown();
+    const sendAgain = await request(app)
+      .post('/api/v1/auth/verify-email/send')
+      .set('Authorization', token);
+    expect(sendAgain.status).toBe(204);
+    const second = lastCodeFor('new6@example.com');
+
+    if (first !== second) {
+      const old = await request(app)
+        .post('/api/v1/auth/verify-email/confirm')
+        .set('Authorization', token)
+        .send({ code: first });
+      expect(old.status).toBe(400);
+    }
+    const ok = await request(app)
+      .post('/api/v1/auth/verify-email/confirm')
+      .set('Authorization', token)
+      .send({ code: second });
+    expect(ok.status).toBe(200);
+  });
+
+  it('send: 409 when already verified, 400 when the account has no email', async () => {
+    const demo = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ identifier: 'admin@ehealth.kh', password: '123456' });
+    const verified = await request(app)
+      .post('/api/v1/auth/verify-email/send')
+      .set('Authorization', `Bearer ${demo.body.token}`);
+    expect(verified.status).toBe(409);
+    expect(verified.body.error.code).toBe('already_verified');
+
+    // seeded doctor has a phone but no email
+    const doctor = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ identifier: '023 900 100', password: '123456' });
+    db.update(users).set({ emailVerifiedAt: null }).where(eq(users.id, 'd1')).run();
+    const noEmail = await request(app)
+      .post('/api/v1/auth/verify-email/send')
+      .set('Authorization', `Bearer ${doctor.body.token}`);
+    expect(noEmail.status).toBe(400);
+    expect(noEmail.body.error.code).toBe('no_email');
   });
 });

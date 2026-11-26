@@ -190,7 +190,12 @@ const SEED_USERS: (typeof users.$inferInsert)[] = [
 const DEMO_PATIENT_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'] as const;
 
 export function seedAccounts(db: Db): void {
-  db.insert(users).values(SEED_USERS).onConflictDoNothing().run();
+  // Demo users count as verified, so the demo needs no email step.
+  const verifiedAt = new Date().toISOString();
+  db.insert(users)
+    .values(SEED_USERS.map((u) => ({ ...u, emailVerifiedAt: verifiedAt })))
+    .onConflictDoNothing()
+    .run();
 
   const links: (typeof patientLinks.$inferInsert)[] = [
     // Dev login users linked to dev patient

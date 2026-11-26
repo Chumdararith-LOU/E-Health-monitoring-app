@@ -12,6 +12,7 @@ export interface UserDto {
   nameKm: string;
   email: string | null;
   phone: string | null;
+  emailVerified: boolean;
 }
 
 export interface RegisterInput {
@@ -31,6 +32,10 @@ export interface LoginInput {
 export interface AuthResponse {
   token: string;
   user: UserDto;
+}
+
+export interface VerifyEmailInput {
+  code: string; // 6 digits from the email
 }
 
 export type MeResponse = UserDto;

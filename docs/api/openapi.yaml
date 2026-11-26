@@ -32,6 +32,10 @@ paths:
     $ref: './accounts.yaml#/login'
   /auth/me:
     $ref: './accounts.yaml#/me'
+  /auth/verify-email/send:
+    $ref: './accounts.yaml#/verifyEmailSend'
+  /auth/verify-email/confirm:
+    $ref: './accounts.yaml#/verifyEmailConfirm'
 
   # readings – Seyla
   /patients/{patientId}/readings:
