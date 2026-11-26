@@ -211,6 +211,22 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Real sign-in (`POST /auth/login` or `/auth/register`). Keeps the token and adds the user
+  /// to the local data when this phone has not seen them yet.
+  void signInWithApi(AppUser apiUser, String apiToken) {
+    if (userById(apiUser.id) == null) {
+      data = data.copyWith(users: [...data.users, apiUser]);
+    }
+    userId = apiUser.id;
+    token = apiToken;
+    selectedPatientId = null;
+    tab = AppTab.home;
+    _changed();
+    if (_enableLiveApi) {
+      unawaited(_hydrateFromApi(apiUser.id, apiToken));
+    }
+  }
+
   Future<void> _fetchDevToken(String id, Role role) async {
     try {
       final res = await api.devLogin(role);
