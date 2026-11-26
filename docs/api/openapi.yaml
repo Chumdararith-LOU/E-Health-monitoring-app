@@ -25,7 +25,24 @@ paths:
   /patients/{patientId}/series:
     $ref: './reports.yaml#/series'
 
-  # accounts – Phayuk: add one line per path here, pointing to ./accounts.yaml
+  # accounts – Phayuk
+  /auth/register:
+    $ref: './accounts.yaml#/register'
+  /auth/login:
+    $ref: './accounts.yaml#/login'
+  /auth/me:
+    $ref: './accounts.yaml#/me'
+  /auth/verify-email/send:
+    $ref: './accounts.yaml#/verifyEmailSend'
+  /auth/verify-email/confirm:
+    $ref: './accounts.yaml#/verifyEmailConfirm'
+  /auth/password/forgot:
+    $ref: './accounts.yaml#/passwordForgot'
+  /auth/password/reset:
+    $ref: './accounts.yaml#/passwordReset'
+  /auth/password/change:
+    $ref: './accounts.yaml#/passwordChange'
+
   # readings – Seyla
   /patients/{patientId}/readings:
     $ref: './readings.yaml#/patientReadings'

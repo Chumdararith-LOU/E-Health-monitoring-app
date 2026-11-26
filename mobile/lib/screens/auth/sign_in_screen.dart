@@ -8,6 +8,11 @@ import '../../data/types.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../../widgets/widgets.dart';
+import '../shell.dart';
+import 'accounts_api.dart';
+import 'forgot_password_screen.dart';
+import 'register_screen.dart';
+import 'verify_email_screen.dart';
 
 const _roleIcons = {
   Role.patient: Mdi.accountHeart,
@@ -27,6 +32,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final _id = TextEditingController();
   final _pw = TextEditingController();
   bool _showPw = false;
+  bool _busy = false;
   String? _errId, _errPw, _errForm;
 
   @override
@@ -42,28 +48,64 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  void _submit() {
+  // The API is not running: fall back to the local demo accounts. Returns an error text, or null when signed in.
+  String? _signInLocally() {
+    final st = AppScope.read(context);
+    final t = st.i18n.t;
+    String norm(String s) => fromKhmerDigits(s).replaceAll(RegExp(r'\D'), '');
+    final typed = norm(_id.text);
+    AppUser? u;
+    for (final x in st.data.users) {
+      if (norm(x.phone).isNotEmpty && norm(x.phone) == typed) u = x;
+    }
+    if (u == null) return t('errNoAccount');
+    if (u.role == Role.admin) return t('errAdminWeb');
+    st.signIn(u.id);
+    return null;
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
     final st = AppScope.read(context);
     final t = st.i18n.t;
     String? eId, ePw, eForm;
     if (_id.text.trim().isEmpty) eId = t('errPhoneRequired');
     if (_pw.text.length < 6) ePw = t('errPasswordShort', {'n': 6});
     if (eId == null && ePw == null) {
-      String norm(String s) => fromKhmerDigits(s).replaceAll(RegExp(r'\D'), '');
-      final typed = norm(_id.text);
-      AppUser? u;
-      for (final x in st.data.users) {
-        if (norm(x.phone).isNotEmpty && norm(x.phone) == typed) u = x;
-      }
-      if (u == null) {
-        eForm = t('errNoAccount');
-      } else if (u.role == Role.admin) {
-        eForm = t('errAdminWeb');
-      } else {
-        st.signIn(u.id);
-        return;
+      final nav = Navigator.of(context);
+      setState(() => _busy = true);
+      try {
+        final session = await st.api.login(fromKhmerDigits(_id.text.trim()), _pw.text);
+        if (!mounted) return;
+        final user = session.user;
+        if (user.role == Role.admin) {
+          eForm = t('errAdminWeb');
+        } else if (!user.emailVerified && user.email != null) {
+          // Signed in, but the email is not verified yet: offer the code page first.
+          nav.push(MaterialPageRoute<void>(
+            builder: (_) => VerifyEmailScreen(
+              email: user.email!,
+              token: session.token,
+              sendOnOpen: true,
+              onFinished: () {
+                nav.popUntil((r) => r.isFirst);
+                st.signInWithApi(user.toAppUser(), session.token);
+              },
+            ),
+          ));
+          return;
+        } else {
+          st.signInWithApi(user.toAppUser(), session.token);
+          return;
+        }
+      } catch (e) {
+        eForm = isOffline(e) ? _signInLocally() : accountErrorText(st.i18n, e);
+        if (eForm == null) return; // signed in with the local demo data
+      } finally {
+        if (mounted) setState(() => _busy = false);
       }
     }
+    if (!mounted) return;
     setState(() {
       _errId = eId;
       _errPw = ePw;
@@ -142,7 +184,19 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                 ),
               ),
-              AppButton(label: t('signIn'), icon: Mdi.login, onPressed: _submit),
+              AppButton(label: t('signIn'), icon: Mdi.login, loading: _busy, onPressed: _submit),
+              AppButton(
+                label: t('acctForgot'),
+                variant: BtnVariant.ghost,
+                disabled: _busy,
+                onPressed: () => push(context, const ForgotPasswordScreen()),
+              ),
+              AppButton(
+                label: t('acctCreate'),
+                variant: BtnVariant.secondary,
+                disabled: _busy,
+                onPressed: () => push(context, const RegisterScreen()),
+              ),
             ]),
             SectionTitle(t('demoAccounts')),
             AppBanner(text: t('demoAccountsHint')),

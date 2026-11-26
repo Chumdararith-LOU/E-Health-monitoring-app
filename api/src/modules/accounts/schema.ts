@@ -16,6 +16,7 @@ export const users = sqliteTable(
     phone: text('phone').unique(),
     email: text('email').unique(),
     passwordHash: text('password_hash').notNull(),
+    emailVerifiedAt: text('email_verified_at'), // null until the email code is confirmed
     age: integer('age'),
     conditionsEn: text('conditions_en'),
     conditionsKm: text('conditions_km'),
@@ -74,4 +75,23 @@ export const doctorNotes = sqliteTable(
     createdAt: text('created_at').notNull().$defaultFn(nowIso),
   },
   (t) => [index('doctor_notes_patient_created_idx').on(t.patientId, t.createdAt)],
+);
+
+// One-time 6-digit codes sent by email (verify email, reset password).
+// Only a hash of the code is stored. A user has at most one open code per purpose.
+export const authCodes = sqliteTable(
+  'auth_codes',
+  {
+    id: text('id').primaryKey().$defaultFn(newId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: text('purpose', { enum: ['verify_email', 'reset_password'] }).notNull(),
+    codeHash: text('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: text('expires_at').notNull(),
+    usedAt: text('used_at'),
+    createdAt: text('created_at').notNull().$defaultFn(nowIso),
+  },
+  (t) => [index('auth_codes_user_purpose_idx').on(t.userId, t.purpose)],
 );

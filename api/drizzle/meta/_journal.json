@@ -8,6 +8,13 @@
       "when": 1795615341438,
       "tag": "0000_curly_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795685850644,
+      "tag": "0001_small_zaran",
+      "breakpoints": true
     }
   ]
 }

@@ -337,6 +337,7 @@ class DataState {
   final List<DoctorNote> notes;
 
   DataState copyWith({
+    List<AppUser>? users,
     List<Link>? links,
     List<Reading>? readings,
     List<CustomField>? fields,
@@ -344,7 +345,7 @@ class DataState {
   }) =>
       DataState(
         version: version,
-        users: users,
+        users: users ?? this.users,
         links: links ?? this.links,
         readings: readings ?? this.readings,
         fields: fields ?? this.fields,

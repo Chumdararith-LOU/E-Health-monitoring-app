@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS: Settings = { lang: 'km', numerals: 'western', textScale:
 type Action =
   | { type: 'signIn'; userId: string }
   | { type: 'setToken'; userId: string; token: string | null }
+  | { type: 'signInApi'; user: User; token: string } // real sign-in: adds the user if the browser does not know them yet
   | { type: 'signOut' }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'upsertReading'; reading: Reading }
@@ -58,6 +59,13 @@ function reducer(s: State, a: Action): State {
       return { ...s, userId: a.userId, token: null };
     case 'setToken':
       return s.userId === a.userId ? { ...s, token: a.token } : s;
+    case 'signInApi':
+      return {
+        ...s,
+        data: d.users.some((u) => u.id === a.user.id) ? d : { ...d, users: [...d.users, a.user] },
+        userId: a.user.id,
+        token: a.token,
+      };
     case 'signOut':
       return { ...s, userId: null, token: null };
     case 'settings':
