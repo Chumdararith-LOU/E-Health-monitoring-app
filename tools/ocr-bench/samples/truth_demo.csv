@@ -1,0 +1,4 @@
+photo,device,condition,systolic,diastolic,pulse,glucose,unit
+demo-bp.png,bp,clear straight,132,84,72,,
+demo-bp-blurry.png,bp,blurry tilted,132,84,72,,
+demo-glucose.png,glucose,clear straight,,,,118,mg/dL
