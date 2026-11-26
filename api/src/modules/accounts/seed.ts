@@ -3,10 +3,12 @@
 
 import type { Db } from '../../shared/db';
 import { devUsers } from '../../shared/dev/dev-users';
+import { hashPasswordSync } from './password';
 import { doctorNotes, inviteCodes, patientLinks, users } from './schema';
 
-// Placeholder hash for demo password "123456" until US-01 bcrypt sign-in is wired.
-const DEMO_PASSWORD_HASH = 'dev-demo-123456';
+// Every demo user signs in with the password "123456".
+// Databases seeded before this change keep the old placeholder hash: run db:reset.
+const DEMO_PASSWORD_HASH = hashPasswordSync('123456');
 
 const SEED_USERS: (typeof users.$inferInsert)[] = [
   // Fixed dev-login users (match api/src/shared/dev/dev-users.ts and Bruno requests)
