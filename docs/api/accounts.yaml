@@ -175,6 +175,98 @@ verifyEmailConfirm:
       '429':
         $ref: '#/responses/TooManyRequests'
 
+passwordForgot:
+  post:
+    tags: [accounts]
+    operationId: forgotPassword
+    summary: Email a 6-digit password reset code
+    description: |
+      Always answers 204, whether or not the email has an account, so nobody can use it to find out who is registered.
+      With `MAIL_ENABLED=false` the code is printed in the API console. One code per minute per account; 5 requests per minute per IP.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email]
+            properties:
+              email: { type: string, format: email }
+    responses:
+      '204':
+        description: Done. If the account exists, a code was sent
+      '400':
+        $ref: './common.yaml#/responses/BadRequest'
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+passwordReset:
+  post:
+    tags: [accounts]
+    operationId: resetPassword
+    summary: Set a new password with the emailed code
+    description: |
+      The code lasts 15 minutes, works once, and is locked after 5 wrong tries. An unknown email and a wrong code give the same `invalid_code`.
+      A good code also marks the email as verified. The user then signs in with the new password; no token is returned.
+      Tokens issued before the reset stay valid until they expire (7 days).
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email, code, newPassword]
+            properties:
+              email: { type: string, format: email }
+              code: { type: string, pattern: '^[0-9]{6}$' }
+              newPassword: { type: string, minLength: 8, maxLength: 200 }
+    responses:
+      '204':
+        description: Password changed
+      '400':
+        description: Bad input or `invalid_code`
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: invalid_code, messageKey: errors.invalid_code }
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
+passwordChange:
+  post:
+    tags: [accounts]
+    operationId: changePassword
+    summary: Change the password of the signed-in user
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [currentPassword, newPassword]
+            properties:
+              currentPassword: { type: string }
+              newPassword: { type: string, minLength: 8, maxLength: 200 }
+    responses:
+      '204':
+        description: Password changed
+      '400':
+        description: Bad input, or `invalid_password` when the current password is wrong
+        content:
+          application/json:
+            schema:
+              $ref: './common.yaml#/schemas/ApiError'
+            example:
+              error: { code: invalid_password, messageKey: errors.invalid_password }
+      '401':
+        $ref: './common.yaml#/responses/Unauthorized'
+      '429':
+        $ref: '#/responses/TooManyRequests'
+
 responses:
   TooManyRequests:
     description: Too many requests from this IP, try again in a minute

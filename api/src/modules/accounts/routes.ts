@@ -1,4 +1,4 @@
-// Accounts routes: register, sign in, and "who am I" (US-01, US-02).
+// Accounts routes: register, sign in, "who am I", email verification and password reset (US-01, US-02).
 // The public routes are rate limited; /auth/me runs requireAuth.
 
 import type { AuthResponse, UserDto } from '@ehealth/types';
@@ -7,11 +7,12 @@ import { type Request, Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, signToken } from '../../shared/auth';
 import { type Db, getDb } from '../../shared/db';
-import { badRequest, conflict, unauthorized } from '../../shared/errors';
+import { AppError, badRequest, conflict, unauthorized } from '../../shared/errors';
 import { validate } from '../../shared/validate';
 import { consumeCode } from './codes';
 import { sendVerificationCode } from './email-verification';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password';
+import { sendResetCode } from './password-reset';
 import { rateLimit } from './rate-limit';
 import { users } from './schema';
 
@@ -45,6 +46,8 @@ const stripSpaces = (value: string) => value.replace(/[\s-]/g, '');
 const samePhone = (phone: string) =>
   sql`replace(replace(${users.phone}, ' ', ''), '-', '') = ${stripSpaces(phone)}`;
 
+const newPassword = z.string().min(8).max(200);
+
 const registerBody = z
   .object({
     role: z.enum(['patient', 'caretaker', 'family', 'doctor']),
@@ -56,7 +59,7 @@ const registerBody = z
       .trim()
       .regex(/^\+?[\d\s-]{8,16}$/)
       .optional(),
-    password: z.string().min(8).max(200),
+    password: newPassword,
     // Honeypot: hidden in the form, so real people leave it empty. Bots fill it in.
     website: z.string().max(0).optional(),
   })
@@ -74,10 +77,26 @@ const confirmBody = z.object({
     .regex(/^\d{6}$/),
 });
 
+const forgotBody = z.object({ email: z.string().trim().toLowerCase().max(254).pipe(z.email()) });
+
+const resetBody = z.object({
+  email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/),
+  newPassword,
+});
+
+const changeBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword });
+
 const registerLimit = rateLimit({ windowMs: 60_000, max: 5 });
 const loginLimit = rateLimit({ windowMs: 60_000, max: 10 });
 const sendCodeLimit = rateLimit({ windowMs: 60_000, max: 5 });
 const confirmLimit = rateLimit({ windowMs: 60_000, max: 10 });
+const forgotLimit = rateLimit({ windowMs: 60_000, max: 5 });
+const resetLimit = rateLimit({ windowMs: 60_000, max: 10 });
+const changeLimit = rateLimit({ windowMs: 60_000, max: 10 });
 
 accountsRouter.post(
   '/auth/register',
@@ -168,5 +187,76 @@ accountsRouter.post(
       .returning()
       .get();
     res.json(toUserDto(updated));
+  },
+);
+
+// Always answers 204, whether or not the email has an account, so it cannot be used to find out
+// who is registered. A cooldown or a mail failure is only logged for the same reason.
+accountsRouter.post(
+  '/auth/password/forgot',
+  forgotLimit,
+  validate({ body: forgotBody }),
+  async (req, res) => {
+    const body: z.infer<typeof forgotBody> = req.body;
+    const db = dbOf(req);
+    const row = db.select().from(users).where(eq(users.email, body.email)).get();
+    if (row) {
+      try {
+        await sendResetCode(db, { id: row.id, email: body.email });
+      } catch (err) {
+        if (!(err instanceof AppError && err.code === 'code_cooldown')) {
+          console.error('could not send the password reset email', err);
+        }
+      }
+    }
+    res.status(204).end();
+  },
+);
+
+accountsRouter.post(
+  '/auth/password/reset',
+  resetLimit,
+  validate({ body: resetBody }),
+  async (req, res) => {
+    const body: z.infer<typeof resetBody> = req.body;
+    const db = dbOf(req);
+    const row = db.select().from(users).where(eq(users.email, body.email)).get();
+
+    // Unknown email and wrong code give the same answer.
+    if (!row || !consumeCode(db, row.id, 'reset_password', body.code)) {
+      throw badRequest('invalid_code', 'errors.invalid_code');
+    }
+    db.update(users)
+      .set({
+        passwordHash: await hashPassword(body.newPassword),
+        // the code proves the person owns this inbox
+        emailVerifiedAt: row.emailVerifiedAt ?? new Date().toISOString(),
+      })
+      .where(eq(users.id, row.id))
+      .run();
+    res.status(204).end();
+  },
+);
+
+accountsRouter.post(
+  '/auth/password/change',
+  requireAuth,
+  changeLimit,
+  validate({ body: changeBody }),
+  async (req, res) => {
+    const body: z.infer<typeof changeBody> = req.body;
+    const db = dbOf(req);
+    const row = db.select().from(users).where(eq(users.id, req.user!.id)).get();
+    if (!row) throw unauthorized();
+
+    if (!(await verifyPassword(body.currentPassword, row.passwordHash))) {
+      // 400, not 401: a 401 makes the apps sign the user out
+      throw badRequest('invalid_password', 'errors.invalid_password');
+    }
+    db.update(users)
+      .set({ passwordHash: await hashPassword(body.newPassword) })
+      .where(eq(users.id, row.id))
+      .run();
+    res.status(204).end();
   },
 );

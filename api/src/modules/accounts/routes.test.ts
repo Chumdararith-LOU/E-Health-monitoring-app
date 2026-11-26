@@ -356,3 +356,166 @@ describe('email verification', () => {
     expect(noEmail.body.error.code).toBe('no_email');
   });
 });
+
+// ---- Password reset and change ----
+
+const mailsTo = (email: string) => sentMail.filter((m) => m.to === email);
+
+const forgot = (email: string) => request(app).post('/api/v1/auth/password/forgot').send({ email });
+
+const reset = (body: object) => request(app).post('/api/v1/auth/password/reset').send(body);
+
+const login = (identifier: string, password: string) =>
+  request(app).post('/api/v1/auth/login').send({ identifier, password });
+
+describe('password reset', () => {
+  it('forgot answers 204 for an unknown email and sends nothing', async () => {
+    const res = await forgot('ghost@example.com');
+    expect(res.status).toBe(204);
+    expect(mailsTo('ghost@example.com')).toHaveLength(0);
+  });
+
+  it('forgot mails a bilingual code, reset changes the password, and the old one stops working', async () => {
+    await registerFresh('reset1@example.com');
+    expect((await forgot('Reset1@Example.com')).status).toBe(204);
+    const mail = mailsTo('reset1@example.com').at(-1);
+    expect(mail?.subject).toContain('Reset your password');
+
+    const done = await reset({
+      email: 'reset1@example.com',
+      code: lastCodeFor('reset1@example.com'),
+      newPassword: 'brand-new-pass',
+    });
+    expect(done.status).toBe(204);
+
+    expect((await login('reset1@example.com', 'brand-new-pass')).status).toBe(200);
+    expect((await login('reset1@example.com', 'correct-horse')).status).toBe(401);
+  });
+
+  it('a reset code works once, and a good reset also verifies the email', async () => {
+    await registerFresh('reset2@example.com');
+    await forgot('reset2@example.com');
+    const code = lastCodeFor('reset2@example.com');
+    const body = { email: 'reset2@example.com', code, newPassword: 'brand-new-pass' };
+
+    expect((await reset(body)).status).toBe(204);
+    const again = await reset({ ...body, newPassword: 'another-pass-1' });
+    expect(again.status).toBe(400);
+    expect(again.body.error.code).toBe('invalid_code');
+
+    const user = (await login('reset2@example.com', 'brand-new-pass')).body.user;
+    expect(user.emailVerified).toBe(true);
+  });
+
+  it('gives the same answer for an unknown email and a wrong code', async () => {
+    await registerFresh('reset3@example.com');
+    await forgot('reset3@example.com');
+    const wrong = await reset({
+      email: 'reset3@example.com',
+      code: '000000' === lastCodeFor('reset3@example.com') ? '111111' : '000000',
+      newPassword: 'brand-new-pass',
+    });
+    const unknown = await reset({
+      email: 'ghost@example.com',
+      code: '123456',
+      newPassword: 'brand-new-pass',
+    });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body).toEqual(unknown.body);
+    // the password did not change
+    expect((await login('reset3@example.com', 'correct-horse')).status).toBe(200);
+  });
+
+  it('locks the code after 5 wrong tries, and a new code unlocks it', async () => {
+    await registerFresh('reset4@example.com');
+    await forgot('reset4@example.com');
+    const good = lastCodeFor('reset4@example.com');
+    const wrong = good === '000000' ? '111111' : '000000';
+    const body = { email: 'reset4@example.com', newPassword: 'brand-new-pass' };
+
+    for (let i = 0; i < 5; i++) expect((await reset({ ...body, code: wrong })).status).toBe(400);
+    expect((await reset({ ...body, code: good })).status).toBe(400);
+
+    skipCooldown();
+    await forgot('reset4@example.com');
+    expect((await reset({ ...body, code: lastCodeFor('reset4@example.com') })).status).toBe(204);
+  });
+
+  it('rejects an expired code and a weak new password', async () => {
+    await registerFresh('reset5@example.com');
+    await forgot('reset5@example.com');
+    const code = lastCodeFor('reset5@example.com');
+    const body = { email: 'reset5@example.com', code, newPassword: 'short' };
+    expect((await reset(body)).status).toBe(400); // validation, code is not used up
+
+    db.update(authCodes)
+      .set({ expiresAt: new Date(Date.now() - 1000).toISOString() })
+      .run();
+    const expired = await reset({ ...body, newPassword: 'long-enough-1' });
+    expect(expired.status).toBe(400);
+    expect(expired.body.error.code).toBe('invalid_code');
+  });
+
+  it('keeps verify and reset codes apart', async () => {
+    const { token } = await registerFresh('reset6@example.com');
+    const verifyCode = lastCodeFor('reset6@example.com');
+
+    // a verify code cannot reset the password
+    const asReset = await reset({
+      email: 'reset6@example.com',
+      code: verifyCode,
+      newPassword: 'brand-new-pass',
+    });
+    expect(asReset.status).toBe(400);
+
+    // and asking for a reset code does not replace the verify code
+    await forgot('reset6@example.com');
+    const confirm = await request(app)
+      .post('/api/v1/auth/verify-email/confirm')
+      .set('Authorization', token)
+      .send({ code: verifyCode });
+    expect(confirm.status).toBe(200);
+  });
+
+  it('forgot is quiet during the cooldown: still 204, no second email', async () => {
+    await registerFresh('reset7@example.com');
+    await forgot('reset7@example.com');
+    const before = mailsTo('reset7@example.com').length;
+    expect((await forgot('reset7@example.com')).status).toBe(204);
+    expect(mailsTo('reset7@example.com')).toHaveLength(before);
+  });
+
+  it('limits forgot to 5 per minute and rejects a bad email with 400', async () => {
+    expect((await forgot('not-an-email')).status).toBe(400);
+    let last = 0;
+    for (let i = 0; i < 6; i++) last = (await forgot('ghost@example.com')).status;
+    expect(last).toBe(429);
+  });
+});
+
+describe('POST /auth/password/change', () => {
+  it('needs a token, checks the current password, and sets the new one', async () => {
+    const { token } = await registerFresh('change1@example.com');
+    const change = (body: object, auth: string | null = token) => {
+      const req = request(app).post('/api/v1/auth/password/change');
+      return (auth ? req.set('Authorization', auth) : req).send(body);
+    };
+
+    expect((await change({ currentPassword: 'x', newPassword: 'whatever-123' }, null)).status).toBe(
+      401,
+    );
+
+    const wrong = await change({ currentPassword: 'wrong-pass', newPassword: 'whatever-123' });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe('invalid_password');
+
+    expect((await change({ currentPassword: 'correct-horse', newPassword: 'short' })).status).toBe(
+      400,
+    );
+
+    const ok = await change({ currentPassword: 'correct-horse', newPassword: 'whatever-123' });
+    expect(ok.status).toBe(204);
+    expect((await login('change1@example.com', 'whatever-123')).status).toBe(200);
+    expect((await login('change1@example.com', 'correct-horse')).status).toBe(401);
+  });
+});

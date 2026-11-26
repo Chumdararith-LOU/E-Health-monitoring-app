@@ -38,4 +38,19 @@ export interface VerifyEmailInput {
   code: string; // 6 digits from the email
 }
 
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  email: string;
+  code: string; // 6 digits from the email
+  newPassword: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export type MeResponse = UserDto;
