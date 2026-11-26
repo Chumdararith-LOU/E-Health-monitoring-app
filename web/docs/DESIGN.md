@@ -71,7 +71,19 @@ Admin:   Users & roles · Tracked fields · Links · Readings support           
 | NFR-01/02 Language & numerals | ✓ |
 | NFR-03 Privacy | ✓ simulated: every read goes through `canView()` (doctor = linked patients; admin = all, support only) |
 
-## 7. For the team
+## 7. Design review (T74 / #57)
+
+Team walkthrough checklist (mobile + web): [`docs/design-review.md`](../../docs/design-review.md).  
+Mobile companion notes: [`mobile/docs/DESIGN.md`](../../mobile/docs/DESIGN.md).
+
+Confirm before **Design reviewed** (2026-12-09):
+
+- [ ] Doctor dashboard and patient page match sections 3–4 above
+- [ ] Admin custom fields (US-16): add → preview → archive/restore
+- [ ] Admin readings support: same validation as mobile, confirm + Undo
+- [ ] Reading entry / duplicate / custom-field flows signed on the shared checklist
+
+## 8. For the team
 
 - Replace `src/store/AppStore.tsx` with API calls (`docs/api.yaml`); the pages don't need to change.
 - `ranges.ts` holds demo normal ranges. Confirm the medical reference.
